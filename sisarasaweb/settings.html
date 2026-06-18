@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa Admin | Pengaturan Toko</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="brand">
+      <i class="fa-solid fa-leaf"></i> Sisarasa
+    </div>
+    <div class="nav flex-column">
+      <a href="index.html" class="nav-link"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+      <a href="menu.html" class="nav-link"><i class="fa-solid fa-utensils"></i> Kelola Menu</a>
+      <a href="orders.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
+      <a href="settings.html" class="nav-link active"><i class="fa-solid fa-gear"></i> Pengaturan Toko</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="top-header">
+      <h2 class="fw-bold mb-0">Pengaturan Toko</h2>
+      <div class="d-flex align-items-center gap-4">
+        <!-- Notification Bell -->
+        <a href="orders.html" class="position-relative text-decoration-none" title="Pesanan Pending">
+          <i class="fa-solid fa-bell fs-5 text-muted"></i>
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="notifBadge" style="font-size: 0.65rem; padding: 0.25em 0.5em; display:none;">0</span>
+        </a>
+        
+        <div class="dropdown">
+          <div class="user-profile d-none d-md-flex" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="cursor:pointer">
+            <img src="https://ui-avatars.com/api/?name=Admin+Toko&background=ff6b6b&color=fff" alt="Admin" id="profileAvatar" style="width:40px;height:40px;border-radius:50%">
+            <div class="d-none d-md-block">
+              <div class="fw-bold user-profile-name" id="profileName" style="font-size:0.9rem">Mitra Sisarasa</div>
+              <div class="text-muted" style="font-size:0.8rem">Admin Toko</div>
+            </div>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end shadow" style="border-radius:12px;border:none;min-width:180px">
+            <li><h6 class="dropdown-header">Mitra Sisarasa</h6></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger fw-bold" href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket me-2"></i>Keluar</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Content -->
+    <div class="row">
+      <div class="col-lg-8">
+        <div class="table-container">
+          <h5 class="fw-bold mb-4">Profil & Lokasi Toko</h5>
+          <p class="text-muted small mb-4">Data ini akan digunakan pelanggan untuk menemukan toko Anda di aplikasi.</p>
+          
+          <form id="storeSettingsForm">
+            <div class="row g-3 mb-4">
+              <div class="col-md-6">
+                <label class="form-label text-muted">Nama Toko</label>
+                <input type="text" class="form-control" id="storeName" value="Warung Nasi Ibu Imas">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted">Nomor Telepon (WhatsApp)</label>
+                <input type="text" class="form-control" id="storePhone" value="081234567890">
+              </div>
+              <div class="col-12">
+                <label class="form-label text-muted">Alamat Lengkap</label>
+                <textarea class="form-control" id="storeAddress" rows="3">Jl. Balonggede No.48, Bandung</textarea>
+              </div>
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label text-muted fw-bold"><i class="fa-solid fa-map-location-dot"></i> Titik Lokasi Peta (Koordinat GPS)</label>
+              <p class="small text-muted mb-2">Geser pin merah ke lokasi persis toko Anda agar akurat di aplikasi mobile pengguna (Terintegrasi Firestore nantinya).</p>
+              <div id="storeMap" style="height: 400px; width: 100%; border-radius: 12px; border: 1px solid #e2e8f0;"></div>
+            </div>
+
+            <div class="row g-3 mb-4">
+              <div class="col-md-6">
+                <label class="form-label text-muted">Latitude</label>
+                <input type="text" class="form-control bg-light" id="latitude" value="-6.914744" readonly>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted">Longitude</label>
+                <input type="text" class="form-control bg-light" id="longitude" value="107.609810" readonly>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-end">
+              <button type="button" class="btn btn-primary-custom px-4" id="saveStoreBtn">
+                <i class="fa-solid fa-floppy-disk me-2"></i> Simpan Perubahan
+              </button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+      
+      <div class="col-lg-4">
+        <div class="table-container mb-4">
+          <h5 class="fw-bold mb-3">Status Toko</h5>
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="fw-bold">Toko Buka</div>
+              <div class="text-muted small">Pelanggan bisa melihat menu Anda</div>
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input fs-4" type="checkbox" id="storeStatus" checked>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="assets/js/main.js"></script>
+
+  <!-- Firebase Logic -->
+  <script type="module" src="assets/js/auth-guard.js"></script>
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    let storeId = localStorage.getItem('userUid');
+    const storeRef = () => doc(db, "stores", storeId);
+
+    const storeNameInput = document.getElementById('storeName');
+    const storePhoneInput = document.getElementById('storePhone');
+    const storeAddressInput = document.getElementById('storeAddress');
+    const latitudeInput = document.getElementById('latitude');
+    const longitudeInput = document.getElementById('longitude');
+    const storeStatusInput = document.getElementById('storeStatus');
+    const saveBtn = document.getElementById('saveStoreBtn');
+
+    // Fungsi Load Data
+    let fetchedStoreLatLng = null; // cache koordinat tersimpan, dipakai begitu map siap
+
+    function movePinIfReady() {
+      // Pindahkan pin hanya jika map sudah siap (window.map/window.marker)
+      // DAN data toko dari Firestore sudah sampai. Bisa dipanggil dari dua
+      // arah (mapReady event ATAU setelah fetch selesai) — aman dipanggil
+      // berkali-kali karena tidak melakukan apa pun jika salah satu belum siap.
+      if (fetchedStoreLatLng && window.map && window.marker) {
+        window.marker.setLatLng(fetchedStoreLatLng);
+        window.map.setView(fetchedStoreLatLng, 13);
+      }
+    }
+
+    async function loadStoreData() {
+      try {
+        const docSnap = await getDoc(storeRef());
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          storeNameInput.value = data.name || "";
+          storePhoneInput.value = data.phone || "";
+          storeAddressInput.value = data.address || "";
+          
+          if(data.latitude) latitudeInput.value = data.latitude;
+          if(data.longitude) longitudeInput.value = data.longitude;
+          
+          if(storeStatusInput) {
+            storeStatusInput.checked = data.isActive !== false;
+          }
+
+          fetchedStoreLatLng = L.latLng(data.latitude || -6.914744, data.longitude || 107.609810);
+          movePinIfReady();
+        }
+      } catch (error) {
+        console.error("Error getting document:", error);
+      }
+    }
+
+    // Map mungkin selesai inisialisasi SEBELUM atau SESUDAH data Firestore
+    // datang — dengarkan event dari main.js supaya urutan tidak masalah.
+    // Tampilkan badge notifikasi dari cache localStorage (diisi oleh orders.html).
+    // Ini bukan real-time, tapi cukup untuk indikasi "ada pesanan pending"
+    // tanpa perlu listener Firestore terpisah di halaman Settings.
+    (function initNotifBadge() {
+      const badge = document.getElementById('notifBadge');
+      const count = Number(localStorage.getItem('pendingOrders') || 0);
+      if (badge && count > 0) {
+        badge.textContent = count;
+        badge.style.display = '';
+      }
+    })();
+
+    document.addEventListener('sisarasa:mapReady', movePinIfReady);
+
+    // Fungsi Save Data
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Menyimpan...';
+      saveBtn.disabled = true;
+
+      try {
+        await setDoc(storeRef(), {
+          name: storeNameInput.value,
+          phone: storePhoneInput.value,
+          address: storeAddressInput.value,
+          latitude: parseFloat(latitudeInput.value),
+          longitude: parseFloat(longitudeInput.value),
+          isActive: storeStatusInput ? storeStatusInput.checked : true,
+          updatedAt: new Date()
+        }, { merge: true });
+
+        // Sinkronkan cache localStorage supaya halaman lain (sidebar/header)
+        // langsung menampilkan nama toko terbaru tanpa perlu logout-login.
+        localStorage.setItem('storeName', storeNameInput.value);
+
+        alert("Berhasil menyimpan profil toko ke Firestore!");
+      } catch (error) {
+        console.error("Error writing document: ", error);
+        alert("Gagal menyimpan data: " + error.message);
+      } finally {
+        saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk me-2"></i> Simpan Perubahan';
+        saveBtn.disabled = false;
+      }
+    });
+
+    // ── Init: tunggu auth-guard.js memastikan status login ──────────────────────
+    let started = false;
+    function startSettingsPage(currentUid) {
+      if (started) return;
+      started = true;
+      storeId = currentUid;
+      loadStoreData();
+    }
+    document.addEventListener('sisarasa:authReady', (e) => {
+      if (e.detail.uid) startSettingsPage(e.detail.uid);
+    });
+    if (storeId) startSettingsPage(storeId);
+  </script>
+</body>
+</html>

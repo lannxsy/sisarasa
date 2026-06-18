@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── HELPER FUNCTIONS ───────────────────────────────────────────
+    // Cek apakah user adalah mitra toko (ada dokumen stores/{uid}-nya)
+    function isMitra(uid) {
+      return exists(/databases/$(database)/documents/stores/$(uid));
+    }
+
+    // Cek apakah user adalah pemilik toko tertentu
+    function isStoreOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // ─── STORES ─────────────────────────────────────────────────────
+    // stores/{uid} — dokumen profil toko milik mitra
+    match /stores/{uid} {
+      // Pembeli di mobile perlu baca info toko (nama, lokasi, isActive, dll)
+      allow read: if request.auth != null;
+
+      // Hanya bisa create untuk uid sendiri (saat register lewat web)
+      allow create: if isStoreOwner(uid);
+
+      // Hanya pemilik toko yang boleh update/delete tokonya sendiri
+      allow update, delete: if isStoreOwner(uid);
+
+      // ─── MENUS (subkoleksi) ──────────────────────────────────────
+      // stores/{uid}/menus/{menuId}
+      match /menus/{menuId} {
+        // Pembeli di mobile perlu baca menu toko
+        allow read: if request.auth != null;
+
+        // Hanya mitra pemilik toko ini yang boleh kelola menunya
+        allow create, update, delete: if isStoreOwner(uid);
+      }
+    }
+
+    // ─── ORDERS ─────────────────────────────────────────────────────
+    // orders/{orderId}
+    match /orders/{orderId} {
+      // Pembeli bisa baca order miliknya sendiri
+      // Mitra toko bisa baca order yang masuk ke tokonya
+      allow read: if request.auth != null && (
+        request.auth.uid == resource.data.userId ||
+        request.auth.uid == resource.data.storeId
+      );
+
+      // Hanya pembeli yang bisa buat order (dari mobile)
+      // userId di order harus cocok dengan UID pembeli yang login
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.userId;
+
+      // Update:
+      // - Pembeli bisa update order miliknya (misal: cancel sebelum confirmed)
+      // - Mitra toko bisa update order yang masuk ke tokonya (konfirmasi, complete, dll)
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.userId ||
+        request.auth.uid == resource.data.storeId
+      );
+
+      // Delete: tidak diizinkan siapapun (order harus tersimpan sebagai riwayat)
+      allow delete: if false;
+    }
+
+    // ─── MAGIC BAGS ─────────────────────────────────────────────────
+    // magic_bags — dibaca pembeli di mobile, ditulis mitra lewat web
+    match /magic_bags/{docId} {
+      // Semua user login bisa baca (pembeli perlu lihat daftar magic bag)
+      allow read: if request.auth != null;
+
+      // Hanya mitra toko yang boleh create/update/delete magic bag
+      // Pastikan field storeId di dokumen cocok dengan UID mitra yang login
+      allow create: if request.auth != null
+                    && isMitra(request.auth.uid)
+                    && request.auth.uid == request.resource.data.storeId;
+
+      allow update, delete: if request.auth != null
+                             && request.auth.uid == resource.data.storeId;
+    }
+
+    // ─── FAVORITES ──────────────────────────────────────────────────
+    // favorites — murni domain pembeli, tidak disentuh web admin
+    match /favorites/{docId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.userId;
+    }
+  }
+}

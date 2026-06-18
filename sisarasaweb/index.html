@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa Admin | Dashboard</title>
+  
+  <!-- Fonts & Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="brand">
+      <i class="fa-solid fa-leaf"></i> Sisarasa
+    </div>
+    <div class="nav flex-column">
+      <a href="index.html" class="nav-link active"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+      <a href="menu.html" class="nav-link"><i class="fa-solid fa-utensils"></i> Kelola Menu</a>
+      <a href="orders.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
+      <a href="settings.html" class="nav-link"><i class="fa-solid fa-gear"></i> Pengaturan Toko</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="top-header">
+      <h2 class="fw-bold mb-0">Dashboard</h2>
+      <div class="d-flex align-items-center gap-4">
+        <!-- Notification Bell -->
+        <a href="orders.html" class="position-relative text-decoration-none" title="Pesanan Pending">
+          <i class="fa-solid fa-bell fs-5 text-muted"></i>
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="notifBadge" style="font-size: 0.65rem; padding: 0.25em 0.5em; display:none;">0</span>
+        </a>
+        
+        <div class="dropdown">
+          <div class="user-profile" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="cursor:pointer">
+            <img src="https://ui-avatars.com/api/?name=Admin+Toko&background=ff6b6b&color=fff" alt="Admin" id="profileAvatar">
+            <div class="d-none d-md-block">
+              <div class="fw-bold user-profile-name" id="profileName" style="font-size:0.9rem">Mitra Sisarasa</div>
+              <div class="text-muted" style="font-size:0.8rem">Admin Toko</div>
+            </div>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end shadow" style="border-radius:12px;border:none;min-width:180px">
+            <li><h6 class="dropdown-header">Mitra Sisarasa</h6></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger fw-bold" href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket me-2"></i>Keluar</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="row g-4 mb-4">
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Pesanan Hari Ini</div>
+              <h3 class="fw-bold mb-0" id="statTodayOrders">-</h3>
+            </div>
+            <div class="stat-icon icon-orange">
+              <i class="fa-solid fa-cart-shopping"></i>
+            </div>
+          </div>
+          <div class="text-muted" id="statPendingLabel" style="font-size: 0.85rem;">Memuat...</div>
+        </div>
+      </div>
+      
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Menu Terjual</div>
+              <h3 class="fw-bold mb-0" id="statMenuSold">-</h3>
+            </div>
+            <div class="stat-icon icon-blue">
+              <i class="fa-solid fa-box-open"></i>
+            </div>
+          </div>
+          <div class="text-muted" style="font-size: 0.85rem;">Total hari ini</div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Menu Tersedia</div>
+              <h3 class="fw-bold mb-0" id="statMenuAvail">-</h3>
+            </div>
+            <div class="stat-icon icon-green">
+              <i class="fa-solid fa-bag-shopping"></i>
+            </div>
+          </div>
+          <div class="text-muted" style="font-size: 0.85rem;">Menu aktif di toko</div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Omzet (Selesai)</div>
+              <h3 class="fw-bold mb-0" id="statRevenue">-</h3>
+            </div>
+            <div class="stat-icon icon-purple">
+              <i class="fa-solid fa-wallet"></i>
+            </div>
+          </div>
+          <div class="text-muted" style="font-size: 0.85rem;">Pesanan berstatus Selesai</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts and Recent Activity -->
+    <div class="row g-4">
+      <div class="col-lg-8">
+        <div class="table-container">
+          <h5 class="fw-bold mb-4">Tren Omzet Mingguan</h5>
+          <canvas id="revenueChart" height="100"></canvas>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="table-container h-100">
+          <h5 class="fw-bold mb-4">Pesanan Terbaru</h5>
+          <div id="recentOrdersList">
+            <div class="text-center text-muted py-3"><i class="fa-solid fa-spinner fa-spin"></i> Memuat...</div>
+          </div>
+          <a href="orders.html" class="btn btn-light w-100 mt-2">Lihat Semua</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- (Order detail modal removed from dashboard — use orders.html for full detail) -->
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script type="module" src="assets/js/auth-guard.js"></script>
+
+  <!-- Dashboard Firebase Logic -->
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import {
+      collection, query, where, orderBy, limit, onSnapshot, getDocs
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function formatRupiah(n) {
+      if (n >= 1000000) return 'Rp ' + (n / 1000000).toFixed(1) + 'jt';
+      if (n >= 1000) return 'Rp ' + (n / 1000).toFixed(0) + 'rb';
+      return 'Rp ' + n.toLocaleString('id-ID');
+    }
+
+    function timeAgo(ts) {
+      if (!ts) return '';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+      if (diff < 60) return diff + 'd lalu';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm lalu';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'j lalu';
+      return Math.floor(diff / 86400) + ' hari lalu';
+    }
+
+    const statusIcon = {
+      pending: '<i class="fa-solid fa-clock fs-4 text-warning"></i>',
+      confirmed: '<i class="fa-solid fa-circle-check fs-4 text-primary"></i>',
+      completed: '<i class="fa-solid fa-circle-check fs-4 text-success"></i>',
+      cancelled: '<i class="fa-solid fa-times-circle fs-4 text-danger"></i>',
+    };
+
+    let started = false; // jaga-jaga supaya listener tidak dipasang dua kali
+
+    function startDashboard(uid) {
+      if (started) return;
+      started = true;
+
+      // Update profile name from localStorage
+      const storedName = localStorage.getItem('storeName');
+      if (storedName) {
+        const el = document.getElementById('profileName');
+        if (el) el.textContent = storedName;
+        const av = document.getElementById('profileAvatar');
+        if (av) av.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(storedName)}&background=ff6b6b&color=fff`;
+      }
+
+      // ── Real-time orders listener ───────────────────────────────────────────
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const ordersQ = query(
+        collection(db, 'orders'),
+        where('storeId', '==', uid),
+        orderBy('createdAt', 'desc'),
+        limit(20)
+      );
+
+      onSnapshot(ordersQ, (snapshot) => {
+        let todayCount = 0, menuSold = 0, revenue = 0, pendingCount = 0;
+        let recentHtml = '';
+        let shown = 0;
+
+        snapshot.forEach(docSnap => {
+          const d = docSnap.data();
+          const createdDate = d.createdAt?.toDate ? d.createdAt.toDate() : null;
+          const isToday = createdDate && createdDate >= today;
+
+          if (isToday) {
+            todayCount++;
+            menuSold += Number(d.qty || 1);
+            if (d.status === 'completed') revenue += Number(d.totalPrice || 0);
+            if (d.status === 'pending') pendingCount++;
+          }
+
+          // Recent orders list (max 5)
+          if (shown < 5) {
+            recentHtml += `
+              <div class="d-flex align-items-center mb-3 pb-3 border-bottom">
+                <div class="me-3">${statusIcon[d.status] || statusIcon.pending}</div>
+                <div class="flex-grow-1" style="min-width:0">
+                  <div class="fw-bold text-truncate">${d.itemName || 'Pesanan'}</div>
+                  <div class="text-muted small">Rp ${Number(d.totalPrice||0).toLocaleString('id-ID')} • ${d.buyerName || '-'}</div>
+                </div>
+                <div class="ms-2 text-end flex-shrink-0">
+                  <div class="text-muted small mb-1">${timeAgo(d.createdAt)}</div>
+                  <a href="orders.html" class="btn btn-sm btn-light py-0" style="font-size:0.75rem;">Detail</a>
+                </div>
+              </div>`;
+            shown++;
+          }
+        });
+
+        // Update stat cards
+        document.getElementById('statTodayOrders').textContent = todayCount;
+        document.getElementById('statMenuSold').textContent = menuSold;
+        document.getElementById('statRevenue').textContent = formatRupiah(revenue);
+        document.getElementById('statPendingLabel').innerHTML =
+          pendingCount > 0
+            ? `<span class="text-warning"><i class="fa-solid fa-clock"></i> ${pendingCount} pesanan menunggu</span>`
+            : `<span class="text-muted">Tidak ada pesanan pending</span>`;
+
+        // Update notification bell
+        const badge = document.getElementById('notifBadge');
+        if (pendingCount > 0) {
+          badge.textContent = pendingCount;
+          badge.style.display = '';
+        } else {
+          badge.style.display = 'none';
+        }
+
+        // Update recent orders
+        document.getElementById('recentOrdersList').innerHTML =
+          recentHtml || '<p class="text-muted text-center small">Belum ada pesanan hari ini.</p>';
+      });
+
+      // ── Menu count (active menus) ───────────────────────────────────────────
+      const menusQ = query(
+        collection(db, 'stores', uid, 'menus'),
+        where('isActive', '==', true)
+      );
+      onSnapshot(menusQ, (snap) => {
+        document.getElementById('statMenuAvail').textContent = snap.size;
+      });
+    }
+
+    // Tunggu auth-guard.js memastikan status login (single source of truth).
+    // Kalau auth-guard sudah lebih dulu selesai sebelum listener ini terpasang
+    // (jarang, tapi mungkin di koneksi cepat), kita juga cek localStorage
+    // sebagai fallback langsung.
+    document.addEventListener('sisarasa:authReady', (e) => {
+      if (e.detail.uid) startDashboard(e.detail.uid);
+    });
+    const existingUid = localStorage.getItem('userUid');
+    if (existingUid) startDashboard(existingUid);
+  </script>
+</body>
+</html>

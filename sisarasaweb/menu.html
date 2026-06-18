@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa Admin | Kelola Menu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="assets/css/style.css">
+  <style>
+    #pickLocationMap { height: 220px; width: 100%; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 8px; }
+    .coord-display { display: flex; gap: 8px; }
+    .coord-display input { background: #f8fafc; font-size: 0.85rem; }
+    .map-hint { font-size: 0.8rem; color: #94a3b8; margin-bottom: 6px; }
+    .sync-badge { display: inline-block; background: #dcfce7; color: #15803d; border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; margin-left: 8px; }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="brand"><i class="fa-solid fa-leaf"></i> Sisarasa</div>
+    <div class="nav flex-column">
+      <a href="index.html" class="nav-link"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+      <a href="menu.html" class="nav-link active"><i class="fa-solid fa-utensils"></i> Kelola Menu</a>
+      <a href="orders.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
+      <a href="settings.html" class="nav-link"><i class="fa-solid fa-gear"></i> Pengaturan Toko</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="top-header">
+      <div>
+        <h2 class="fw-bold mb-0">Kelola Menu <span class="sync-badge"><i class="fa-solid fa-mobile-screen me-1"></i>Sync ke Aplikasi</span></h2>
+        <p class="text-muted small mt-1 mb-0">Menu yang kamu simpan otomatis muncul di peta aplikasi SisaRasa</p>
+      </div>
+      <div class="d-flex align-items-center gap-4">
+        <button class="btn-primary-custom" id="openAddModalBtn">
+          <i class="fa-solid fa-plus"></i> Tambah Menu
+        </button>
+        <a href="orders.html" class="position-relative text-decoration-none" title="Pesanan Pending">
+          <i class="fa-solid fa-bell fs-5 text-muted"></i>
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="notifBadge" style="font-size: 0.65rem; padding: 0.25em 0.5em; display:none;">0</span>
+        </a>
+        <div class="dropdown">
+          <div class="user-profile d-none d-md-flex" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="cursor:pointer">
+            <img src="https://ui-avatars.com/api/?name=Admin+Toko&background=ff6b6b&color=fff" alt="Admin" id="profileAvatar" style="width:40px;height:40px;border-radius:50%">
+            <div class="d-none d-md-block">
+              <div class="fw-bold user-profile-name" id="profileName" style="font-size:0.9rem">Mitra Sisarasa</div>
+              <div class="text-muted" style="font-size:0.8rem">Admin Toko</div>
+            </div>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end shadow" style="border-radius:12px;border:none;min-width:180px">
+            <li><h6 class="dropdown-header">Mitra Sisarasa</h6></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger fw-bold" href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket me-2"></i>Keluar</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Menu Table -->
+    <div class="table-container">
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Nama Menu</th>
+              <th>Harga Asli</th>
+              <th>Harga Diskon</th>
+              <th>Jam Pickup</th>
+              <th>Stok</th>
+              <th>Lokasi</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="menuTableBody">
+            <tr id="loadingRow">
+              <td colspan="8" class="text-center text-muted py-4">
+                <i class="fa-solid fa-spinner fa-spin me-2"></i> Memuat data menu...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Menu Modal (Add / Edit) -->
+  <div class="modal fade" id="mbModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content" style="border-radius: 16px; border: none;">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" id="mbModalLabel">Tambah Menu</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="menuForm">
+            <input type="hidden" id="menuDocId">
+            <input type="hidden" id="menuMagicBagId">
+
+            <div class="row g-3 mb-3">
+              <div class="col-md-8">
+                <label class="form-label text-muted">Nama Menu</label>
+                <input type="text" class="form-control" id="menuName" placeholder="Contoh: Paket Nasi Sisa Malam" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label text-muted">Emoji</label>
+                <input type="text" class="form-control text-center" id="menuEmoji" placeholder="🍱" maxlength="2" style="font-size: 1.4rem;">
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-6">
+                <label class="form-label text-muted">Harga Asli (Rp)</label>
+                <input type="number" class="form-control" id="menuOriginalPrice" placeholder="30000" required>
+              </div>
+              <div class="col-6">
+                <label class="form-label text-muted">Harga Diskon (Rp)</label>
+                <input type="number" class="form-control" id="menuDiscountPrice" placeholder="10000" required>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-6">
+                <label class="form-label text-muted">Jam Pickup (Mulai)</label>
+                <input type="time" class="form-control" id="menuPickupStart" value="20:00">
+              </div>
+              <div class="col-6">
+                <label class="form-label text-muted">Jam Pickup (Selesai)</label>
+                <input type="time" class="form-control" id="menuPickupEnd" value="22:00">
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-6">
+                <label class="form-label text-muted">Stok</label>
+                <input type="number" class="form-control" id="menuStock" value="5" min="0">
+              </div>
+              <div class="col-6">
+                <label class="form-label text-muted">Kategori</label>
+                <select class="form-select" id="menuKategori">
+                  <option value="Makanan Berat">Makanan Berat</option>
+                  <option value="Roti & Kue">Roti & Kue</option>
+                  <option value="Minuman & Snack">Minuman & Snack</option>
+                  <option value="Fast Food">Fast Food</option>
+                  <option value="Japanese Food">Japanese Food</option>
+                  <option value="Vegetarian">Vegetarian</option>
+                  <option value="Lainnya">Lainnya</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label text-muted">Deskripsi Magic Bag</label>
+              <textarea class="form-control" id="menuDeskripsi" rows="2" placeholder="Ceritakan isi Magic Bag ini..."></textarea>
+            </div>
+
+            <!-- LOKASI PETA -->
+            <div class="mb-2">
+              <label class="form-label text-muted fw-bold">
+                <i class="fa-solid fa-map-location-dot text-success me-1"></i>
+                Titik Lokasi Toko di Peta
+                <span class="sync-badge"><i class="fa-solid fa-mobile-screen me-1"></i>Tampil di Aplikasi</span>
+              </label>
+              <p class="map-hint">Klik di peta untuk menentukan lokasi toko. Pin akan muncul di aplikasi mobile pengguna.</p>
+              <div id="pickLocationMap"></div>
+              <div class="coord-display">
+                <div class="flex-fill">
+                  <label class="form-label text-muted small mb-1">Latitude</label>
+                  <input type="text" class="form-control form-control-sm" id="menuLat" readonly placeholder="Klik peta...">
+                </div>
+                <div class="flex-fill">
+                  <label class="form-label text-muted small mb-1">Longitude</label>
+                  <input type="text" class="form-control form-control-sm" id="menuLng" readonly placeholder="Klik peta...">
+                </div>
+                <div class="d-flex align-items-end pb-1">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="pasteFromSettingsBtn" title="Pakai koordinat dari Pengaturan Toko">
+                    <i class="fa-solid fa-paste"></i> Dari Settings
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" id="menuIsActive" checked>
+              <label class="form-check-label text-success fw-bold">Aktifkan Langsung</label>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+          <button type="button" class="btn-primary-custom px-4" id="saveMenuBtn">
+            <i class="fa-solid fa-floppy-disk me-1"></i> Simpan & Sync ke App
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Delete Modal -->
+  <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+      <div class="modal-content" style="border-radius: 16px; border: none;">
+        <div class="modal-body text-center p-4">
+          <i class="fa-solid fa-triangle-exclamation fs-1 text-warning mb-3"></i>
+          <h5 class="fw-bold">Hapus Menu?</h5>
+          <p class="text-muted small">Menu juga akan dihapus dari aplikasi mobile.</p>
+          <input type="hidden" id="deleteDocId">
+          <input type="hidden" id="deleteMagicBagId">
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-light flex-fill" data-bs-dismiss="modal">Batal</button>
+            <button class="btn btn-danger flex-fill" id="confirmDeleteBtn">Hapus</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script type="module" src="assets/js/auth-guard.js"></script>
+
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import {
+      collection, doc, addDoc, updateDoc, deleteDoc,
+      query, orderBy, onSnapshot, getDoc, setDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    let uid = localStorage.getItem('userUid');
+    let pickMap = null, pickMarker = null;
+    let storeInfo = { name: 'Toko Saya', alamat: '', lat: -6.9175, lng: 107.6191 };
+
+    // ── Load info toko dari Firestore (nama, alamat, lat, lng) ─────────────────
+    async function loadStoreInfo() {
+      if (!uid) return;
+      try {
+        const snap = await getDoc(doc(db, 'stores', uid));
+        if (snap.exists()) {
+          const d = snap.data();
+          storeInfo = {
+            name: d.name || 'Toko Saya',
+            alamat: d.address || '',
+            lat: d.lat || -6.9175,
+            lng: d.lng || 107.6191,
+          };
+          const el = document.getElementById('profileName');
+          if (el) el.textContent = storeInfo.name;
+        }
+      } catch(e) { console.warn('loadStoreInfo:', e); }
+    }
+
+    // ── Inisialisasi peta pilih lokasi di modal ────────────────────────────────
+    function initPickMap(lat, lng) {
+      if (pickMap) {
+        pickMap.remove();
+        pickMap = null;
+        pickMarker = null;
+      }
+      setTimeout(() => {
+        pickMap = L.map('pickLocationMap').setView([lat, lng], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap', maxZoom: 19
+        }).addTo(pickMap);
+
+        pickMarker = L.marker([lat, lng], { draggable: true }).addTo(pickMap);
+        document.getElementById('menuLat').value = lat.toFixed(6);
+        document.getElementById('menuLng').value = lng.toFixed(6);
+
+        pickMarker.on('dragend', () => {
+          const pos = pickMarker.getLatLng();
+          document.getElementById('menuLat').value = pos.lat.toFixed(6);
+          document.getElementById('menuLng').value = pos.lng.toFixed(6);
+        });
+
+        pickMap.on('click', (e) => {
+          pickMarker.setLatLng(e.latlng);
+          document.getElementById('menuLat').value = e.latlng.lat.toFixed(6);
+          document.getElementById('menuLng').value = e.latlng.lng.toFixed(6);
+        });
+      }, 300);
+    }
+
+    // ── Tombol "Dari Settings" ─────────────────────────────────────────────────
+    document.getElementById('pasteFromSettingsBtn').addEventListener('click', () => {
+      if (pickMap && pickMarker) {
+        pickMarker.setLatLng([storeInfo.lat, storeInfo.lng]);
+        pickMap.setView([storeInfo.lat, storeInfo.lng], 15);
+      }
+      document.getElementById('menuLat').value = storeInfo.lat.toFixed ? storeInfo.lat.toFixed(6) : storeInfo.lat;
+      document.getElementById('menuLng').value = storeInfo.lng.toFixed ? storeInfo.lng.toFixed(6) : storeInfo.lng;
+    });
+
+    // ── Render baris tabel ─────────────────────────────────────────────────────
+    function renderRow(id, data) {
+      const statusBadge = data.isActive
+        ? `<span class="badge badge-confirmed">Aktif</span>`
+        : `<span class="badge badge-cancelled">Nonaktif</span>`;
+      const lokasiIcon = (data.lat && data.lng)
+        ? `<span class="text-success" title="${data.lat}, ${data.lng}"><i class="fa-solid fa-location-dot"></i> Ada</span>`
+        : `<span class="text-muted"><i class="fa-solid fa-location-dot"></i> -</span>`;
+      return `
+        <tr id="row-${id}">
+          <td class="fw-medium">${data.emoji || '🛍️'} ${data.name}</td>
+          <td><span class="text-decoration-line-through text-muted small">Rp ${Number(data.originalPrice).toLocaleString('id-ID')}</span></td>
+          <td class="text-success fw-bold">Rp ${Number(data.discountPrice).toLocaleString('id-ID')}</td>
+          <td>${data.pickupStart} - ${data.pickupEnd}</td>
+          <td class="fw-bold ${data.stock === 0 ? 'text-danger' : ''}">${data.stock}</td>
+          <td>${lokasiIcon}</td>
+          <td>${statusBadge}</td>
+          <td>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-light text-primary" onclick="editMenu('${id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn btn-sm btn-light text-danger" onclick="promptDelete('${id}', '${data.magicBagId || ''}')" title="Hapus"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>`;
+    }
+
+    // ── Real-time listener ─────────────────────────────────────────────────────
+    let menuCache = {};
+    function listenMenus() {
+      const q = query(collection(db, 'stores', uid, 'menus'), orderBy('createdAt', 'desc'));
+      onSnapshot(q, (snapshot) => {
+        menuCache = {};
+        if (snapshot.empty) {
+          document.getElementById('menuTableBody').innerHTML =
+            `<tr><td colspan="8" class="text-center text-muted py-4">Belum ada menu. Klik "Tambah Menu" untuk memulai.</td></tr>`;
+          return;
+        }
+        let html = '';
+        snapshot.forEach(d => { menuCache[d.id] = d.data(); html += renderRow(d.id, d.data()); });
+        document.getElementById('menuTableBody').innerHTML = html;
+      });
+    }
+
+    // ── Buka modal Tambah ──────────────────────────────────────────────────────
+    document.getElementById('openAddModalBtn').addEventListener('click', () => {
+      document.getElementById('mbModalLabel').textContent = 'Tambah Menu';
+      document.getElementById('menuForm').reset();
+      document.getElementById('menuDocId').value = '';
+      document.getElementById('menuMagicBagId').value = '';
+      document.getElementById('menuIsActive').checked = true;
+      document.getElementById('menuEmoji').value = '🛍️';
+      document.getElementById('menuKategori').value = 'Makanan Berat';
+      new bootstrap.Modal(document.getElementById('mbModal')).show();
+      initPickMap(storeInfo.lat, storeInfo.lng);
+    });
+
+    // ── Edit: prefill form ─────────────────────────────────────────────────────
+    window.editMenu = function(id) {
+      const data = menuCache[id];
+      if (!data) return;
+      document.getElementById('mbModalLabel').textContent = 'Edit Menu';
+      document.getElementById('menuDocId').value = id;
+      document.getElementById('menuMagicBagId').value = data.magicBagId || '';
+      document.getElementById('menuName').value = data.name;
+      document.getElementById('menuEmoji').value = data.emoji || '🛍️';
+      document.getElementById('menuOriginalPrice').value = data.originalPrice;
+      document.getElementById('menuDiscountPrice').value = data.discountPrice;
+      document.getElementById('menuPickupStart').value = data.pickupStart;
+      document.getElementById('menuPickupEnd').value = data.pickupEnd;
+      document.getElementById('menuStock').value = data.stock;
+      document.getElementById('menuKategori').value = data.kategori || 'Makanan Berat';
+      document.getElementById('menuDeskripsi').value = data.deskripsi || '';
+      document.getElementById('menuIsActive').checked = data.isActive;
+      new bootstrap.Modal(document.getElementById('mbModal')).show();
+      const lat = data.lat || storeInfo.lat;
+      const lng = data.lng || storeInfo.lng;
+      initPickMap(lat, lng);
+    };
+
+    // ── Simpan (Tambah/Edit) + SYNC ke magic_bags ─────────────────────────────
+    document.getElementById('saveMenuBtn').addEventListener('click', async () => {
+      const saveBtn = document.getElementById('saveMenuBtn');
+      const docId = document.getElementById('menuDocId').value;
+      const existingMagicBagId = document.getElementById('menuMagicBagId').value;
+
+      const lat = parseFloat(document.getElementById('menuLat').value) || storeInfo.lat;
+      const lng = parseFloat(document.getElementById('menuLng').value) || storeInfo.lng;
+      const pickupStart = document.getElementById('menuPickupStart').value;
+      const pickupEnd = document.getElementById('menuPickupEnd').value;
+
+      // Payload untuk stores/{uid}/menus
+      const menuPayload = {
+        name: document.getElementById('menuName').value,
+        emoji: document.getElementById('menuEmoji').value || '🛍️',
+        originalPrice: Number(document.getElementById('menuOriginalPrice').value),
+        discountPrice: Number(document.getElementById('menuDiscountPrice').value),
+        pickupStart,
+        pickupEnd,
+        stock: Number(document.getElementById('menuStock').value),
+        kategori: document.getElementById('menuKategori').value,
+        deskripsi: document.getElementById('menuDeskripsi').value,
+        isActive: document.getElementById('menuIsActive').checked,
+        lat,
+        lng,
+      };
+
+      // Payload untuk magic_bags (global, dibaca app)
+      const magicBagPayload = {
+        tokoNama: storeInfo.name,
+        emoji: menuPayload.emoji,
+        kategori: menuPayload.kategori,
+        harga: menuPayload.discountPrice,
+        hargaAsli: menuPayload.originalPrice,
+        stok: menuPayload.stock,
+        jamPickup: `${pickupStart} - ${pickupEnd}`,
+        deskripsi: menuPayload.deskripsi,
+        alamat: storeInfo.alamat,
+        lat,
+        lng,
+        storeId: uid,
+        updatedAt: Date.now(),
+      };
+
+      saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menyimpan...';
+      saveBtn.disabled = true;
+
+      try {
+        let magicBagId = existingMagicBagId;
+
+        if (docId) {
+          // UPDATE
+          await updateDoc(doc(db, 'stores', uid, 'menus', docId), menuPayload);
+          if (magicBagId) {
+            await updateDoc(doc(db, 'magic_bags', magicBagId), magicBagPayload);
+          }
+        } else {
+          // ADD — buat di magic_bags dulu, dapat id-nya
+          menuPayload.createdAt = new Date();
+          magicBagPayload.createdAt = Date.now();
+          const mbRef = await addDoc(collection(db, 'magic_bags'), magicBagPayload);
+          magicBagId = mbRef.id;
+          menuPayload.magicBagId = magicBagId;
+          await addDoc(collection(db, 'stores', uid, 'menus'), menuPayload);
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById('mbModal')).hide();
+      } catch (err) {
+        alert('Gagal menyimpan: ' + err.message);
+      } finally {
+        saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i> Simpan & Sync ke App';
+        saveBtn.disabled = false;
+      }
+    });
+
+    // ── Delete ─────────────────────────────────────────────────────────────────
+    window.promptDelete = function(id, magicBagId) {
+      document.getElementById('deleteDocId').value = id;
+      document.getElementById('deleteMagicBagId').value = magicBagId;
+      new bootstrap.Modal(document.getElementById('deleteModal')).show();
+    };
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+      const id = document.getElementById('deleteDocId').value;
+      const magicBagId = document.getElementById('deleteMagicBagId').value;
+      try {
+        await deleteDoc(doc(db, 'stores', uid, 'menus', id));
+        if (magicBagId) await deleteDoc(doc(db, 'magic_bags', magicBagId));
+        bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+      } catch (err) {
+        alert('Gagal menghapus: ' + err.message);
+      }
+    });
+
+    // ── Notif badge ────────────────────────────────────────────────────────────
+    (function() {
+      const badge = document.getElementById('notifBadge');
+      const count = Number(localStorage.getItem('pendingOrders') || 0);
+      if (badge && count > 0) { badge.textContent = count; badge.style.display = ''; }
+    })();
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    let started = false;
+    async function startPage(currentUid) {
+      if (started) return;
+      started = true;
+      uid = currentUid;
+      await loadStoreInfo();
+      listenMenus();
+    }
+    document.addEventListener('sisarasa:authReady', (e) => { if (e.detail.uid) startPage(e.detail.uid); });
+    if (uid) startPage(uid);
+  </script>
+</body>
+</html>

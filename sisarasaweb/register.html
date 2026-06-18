@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa | Daftar Mitra</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <link rel="stylesheet" href="assets/css/style.css">
+  <style>
+    body {
+      background-color: var(--bg-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .auth-card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+      overflow: hidden;
+      max-width: 900px;
+      width: 100%;
+      display: flex;
+    }
+    .auth-image {
+      flex: 1;
+      background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+      color: white;
+      padding: 3rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .auth-form-container {
+      flex: 1.2;
+      padding: 3rem;
+    }
+    .form-control {
+      padding: 0.7rem 1rem;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+    }
+    .form-control:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 0.25rem rgba(255, 107, 107, 0.25);
+    }
+    
+    @media (max-width: 768px) {
+      .auth-card { flex-direction: column; }
+      .auth-image { padding: 2rem; text-align: center; }
+      .auth-form-container { padding: 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container p-3 py-5">
+    <div class="auth-card mx-auto">
+      <!-- Left Side: Branding/Image -->
+      <div class="auth-image d-none d-md-flex">
+        <h2 class="fw-bold mb-3"><i class="fa-solid fa-leaf"></i> Sisarasa</h2>
+        <p class="fs-5 mb-0">Bergabunglah bersama kami untuk mengurangi sisa makanan dan menjangkau lebih banyak pelanggan.</p>
+      </div>
+      
+      <!-- Right Side: Form -->
+      <div class="auth-form-container">
+        <div class="text-center mb-4 d-md-none">
+          <h2 class="fw-bold text-primary-custom mb-0"><i class="fa-solid fa-leaf"></i> Sisarasa</h2>
+        </div>
+        <h3 class="fw-bold mb-1">Daftar Mitra Baru 🚀</h3>
+        <p class="text-muted mb-4">Lengkapi data di bawah ini untuk mendaftarkan toko Anda.</p>
+        
+        <form id="registerForm">
+          <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+              <label class="form-label fw-medium">Nama Lengkap</label>
+              <input type="text" class="form-control" id="fullName" placeholder="Nama Anda" required>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-medium">Nama Toko</label>
+              <input type="text" class="form-control" id="storeName" placeholder="Contoh: Warung Ibu Imas" required>
+            </div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label fw-medium">Alamat Email</label>
+            <input type="email" class="form-control" id="email" placeholder="nama@email.com" required>
+          </div>
+          
+          <div class="row g-3 mb-4">
+            <div class="col-sm-6">
+              <label class="form-label fw-medium">Kata Sandi</label>
+              <input type="password" class="form-control" id="password" placeholder="••••••••" required>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-medium">Konfirmasi Sandi</label>
+              <input type="password" class="form-control" id="confirmPassword" placeholder="••••••••" required>
+            </div>
+          </div>
+          
+          <div class="form-check mb-4">
+            <input class="form-check-input" type="checkbox" id="terms" required>
+            <label class="form-check-label text-muted small" for="terms">
+              Saya setuju dengan <a href="#" class="text-decoration-none" style="color: var(--primary-color);">Syarat & Ketentuan</a> yang berlaku.
+            </label>
+          </div>
+          
+          <button type="submit" id="registerBtn" class="btn btn-primary-custom w-100 mb-3 py-2 fs-6">Daftarkan Toko</button>
+          
+          <p class="text-center text-muted small mb-0">
+            Sudah punya akun? <a href="login.html" class="fw-bold text-decoration-none" style="color: var(--primary-color);">Masuk di sini</a>
+          </p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, db } from './assets/js/firebase-config.js';
+    import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const registerForm = document.getElementById('registerForm');
+    const registerBtn = document.getElementById('registerBtn');
+
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const fullName = document.getElementById('fullName').value;
+      const storeName = document.getElementById('storeName').value;
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+
+      if (password !== confirmPassword) {
+        alert("Kata sandi tidak cocok!");
+        return;
+      }
+
+      registerBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Mendaftarkan...';
+      registerBtn.disabled = true;
+
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // Create store document
+        await setDoc(doc(db, "stores", user.uid), {
+          ownerName: fullName,
+          name: storeName,
+          email: email,
+          isActive: true,
+          createdAt: new Date()
+        });
+
+        // Simpan ke localStorage SEBELUM redirect, supaya index.html (yang
+        // mengecek localStorage secara synchronous saat load) tidak salah
+        // mengira belum login dan melempar balik ke login.html.
+        localStorage.setItem('userUid', user.uid);
+        localStorage.setItem('storeName', storeName);
+
+        alert("Pendaftaran berhasil!");
+        window.location.href = 'index.html';
+      } catch (error) {
+        console.error("Error signing up:", error);
+        alert("Gagal mendaftar: " + error.message);
+      } finally {
+        registerBtn.innerHTML = 'Daftarkan Toko';
+        registerBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

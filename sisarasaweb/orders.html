@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa Admin | Kelola Pesanan</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="brand">
+      <i class="fa-solid fa-leaf"></i> Sisarasa
+    </div>
+    <div class="nav flex-column">
+      <a href="index.html" class="nav-link"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+      <a href="menu.html" class="nav-link"><i class="fa-solid fa-utensils"></i> Kelola Menu</a>
+      <a href="orders.html" class="nav-link active"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
+      <a href="settings.html" class="nav-link"><i class="fa-solid fa-gear"></i> Pengaturan Toko</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="top-header">
+      <h2 class="fw-bold mb-0">Kelola Pesanan</h2>
+      <div class="d-flex align-items-center gap-4">
+        <input type="text" class="form-control" id="searchInput" placeholder="Cari Kode Pesanan..." style="width: 220px;">
+        <div class="position-relative" style="cursor: pointer;" title="Notifikasi" id="bellWrapper">
+          <i class="fa-solid fa-bell fs-5 text-muted"></i>
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="notifBadge" style="font-size: 0.65rem; padding: 0.25em 0.5em; display:none;">0</span>
+        </div>
+        <div class="user-profile d-none d-md-flex">
+          <img src="https://ui-avatars.com/api/?name=Admin+Toko&background=ff6b6b&color=fff" alt="Admin" style="width: 40px; height: 40px; border-radius: 50%;">
+          <div class="d-none d-md-block">
+            <div class="fw-bold user-profile-name" style="font-size: 0.9rem;">Mitra Sisarasa</div>
+            <div class="text-muted" style="font-size: 0.8rem;">Admin Toko</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders Table -->
+    <div class="table-container">
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Kode</th>
+              <th>Waktu</th>
+              <th>Pembeli</th>
+              <th>Item</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="ordersTableBody">
+            <tr id="loadingRow">
+              <td colspan="7" class="text-center text-muted py-4">
+                <i class="fa-solid fa-spinner fa-spin me-2"></i> Mendengarkan pesanan masuk...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Detail Modal -->
+  <div class="modal fade" id="orderDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content" style="border-radius: 16px; border: none;">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" id="orderDetailTitle">Detail Pesanan</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="orderDetailBody">
+          <!-- Filled by JS -->
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-light w-100 mb-2" data-bs-dismiss="modal">Tutup</button>
+          <div class="d-flex w-100 gap-2">
+            <button type="button" class="btn btn-outline-danger flex-fill" id="rejectOrderBtn">Tolak Pesanan</button>
+            <button type="button" class="btn btn-primary-custom flex-fill" id="acceptOrderBtn">Terima Pesanan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script type="module" src="assets/js/auth-guard.js"></script>
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import {
+      collection, doc, query, orderBy, onSnapshot, updateDoc, where, getDocs
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    let uid = localStorage.getItem('userUid');
+    const tableBody = document.getElementById('ordersTableBody');
+    const detailModal = new bootstrap.Modal(document.getElementById('orderDetailModal'));
+    let currentDetailOrderId = null;
+    let ordersCache = {};       // id -> dokumen asli (raw)
+    let normalizedCache = {};   // id -> hasil normalizeOrder()
+
+    // bagId (magic_bags) milik toko ini. Dipakai sebagai fallback untuk
+    // mencocokkan order LAMA yang dibuat sebelum field storeId ada di
+    // dokumen orders. Order baru sudah langsung punya storeId.
+    let myBagIds = new Set();
+
+    async function loadMyBagIds() {
+      try {
+        const menuSnap = await getDocs(collection(db, 'stores', uid, 'menus'));
+        menuSnap.forEach(d => {
+          const magicBagId = d.data().magicBagId;
+          if (magicBagId) myBagIds.add(magicBagId);
+        });
+      } catch (err) {
+        console.error('Gagal memuat daftar magic bag toko:', err);
+      }
+    }
+
+    // ── Normalisasi dokumen order ───────────────────────────────────────────
+    // Order baru sudah punya field standar: orderCode, buyerName, buyerPhone,
+    // itemName, qty, totalPrice, pickupCode, storeId.
+    // Order LAMA hanya punya: tokoNama, bagId, harga, jumlah, kodePickup,
+    // userEmail, dan TIDAK punya storeId. Fungsi ini menyamakan keduanya.
+    function normalizeOrder(id, data) {
+      return {
+        orderCode: data.orderCode || data.kodePickup || id.slice(-6).toUpperCase(),
+        buyerName: data.buyerName || data.userEmail || '-',
+        buyerPhone: data.buyerPhone || '',
+        itemName: data.itemName || data.tokoNama || '-',
+        qty: data.qty || data.jumlah || 1,
+        subtotal: data.subtotal ?? data.harga ?? data.totalPrice ?? 0,
+        serviceFee: data.serviceFee || 0,
+        totalPrice: data.totalPrice ?? data.harga ?? 0,
+        pickupCode: data.pickupCode || data.kodePickup || '-',
+        status: data.status || 'pending',
+        createdAt: data.createdAt,
+        belongsToStore: data.storeId === uid || (!!data.bagId && myBagIds.has(data.bagId)),
+      };
+    }
+
+    // ── Badge classes ─────────────────────────────────────────────────────────
+    const badgeClass = { pending: 'badge-pending', confirmed: 'badge-confirmed', completed: 'badge-completed', cancelled: 'badge-cancelled' };
+    const badgeLabel = { pending: 'Pending', confirmed: 'Confirmed', completed: 'Selesai', cancelled: 'Batal' };
+
+    // ── Format timestamp ──────────────────────────────────────────────────────
+    function formatTime(ts) {
+      if (!ts) return '-';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' });
+    }
+
+    // ── Render row ────────────────────────────────────────────────────────────
+    function renderRow(id, n) {
+      const cls = badgeClass[n.status] || '';
+      const lbl = badgeLabel[n.status] || n.status;
+      return `
+        <tr id="row-${id}">
+          <td class="fw-bold">#${n.orderCode}</td>
+          <td>${formatTime(n.createdAt)}</td>
+          <td>${n.buyerName}</td>
+          <td class="text-muted small">${n.itemName} x${n.qty}</td>
+          <td class="fw-bold">Rp ${Number(n.totalPrice || 0).toLocaleString('id-ID')}</td>
+          <td><span class="badge ${cls}" id="badge-${id}">${lbl}</span></td>
+          <td>
+            <div class="d-flex gap-2 align-items-center">
+              <select class="form-select form-select-sm w-auto" onchange="changeStatus('${id}', this)">
+                <option value="pending" ${n.status==='pending'?'selected':''}>Pending</option>
+                <option value="confirmed" ${n.status==='confirmed'?'selected':''}>Confirmed</option>
+                <option value="completed" ${n.status==='completed'?'selected':''}>Selesai</option>
+                <option value="cancelled" ${n.status==='cancelled'?'selected':''}>Batal</option>
+              </select>
+              <button class="btn btn-sm btn-light py-1" onclick="showDetail('${id}')">Detail</button>
+            </div>
+          </td>
+        </tr>`;
+    }
+
+    // ── Real-time listener ────────────────────────────────────────────────────
+    // Catatan: kita TIDAK bisa where('storeId','==',uid) sendirian karena
+    // order lama tidak punya field storeId sama sekali (akan ke-skip oleh
+    // Firestore). Jadi kita dengarkan SEMUA order milik database yang bisa
+    // dibaca rules (read diizinkan kalau auth.uid cocok userId ATAU storeId
+    // pada dokumen tsb -- untuk order lama tanpa storeId, rules cocokkan
+    // lewat field lain; lihat catatan firestore.rules), lalu filter manual
+    // di client memakai belongsToStore.
+    function listenOrders() {
+      const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+
+      onSnapshot(q, (snapshot) => {
+        ordersCache = {};
+        normalizedCache = {};
+        let pendingCount = 0;
+        let html = '';
+        let shown = 0;
+
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          const n = normalizeOrder(docSnap.id, data);
+
+          ordersCache[docSnap.id] = data;
+          normalizedCache[docSnap.id] = n;
+          html += renderRow(docSnap.id, n);
+          if (n.status === 'pending') pendingCount++;
+          shown++;
+        });
+
+        if (shown === 0) {
+          tableBody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Belum ada pesanan masuk.</td></tr>`;
+        } else {
+          tableBody.innerHTML = html;
+        }
+        updateBell(pendingCount);
+      }, (err) => {
+        console.error('Gagal memuat orders:', err);
+        tableBody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Gagal memuat pesanan: ${err.message}</td></tr>`;
+      });
+    }
+
+    // ── Update bell badge ─────────────────────────────────────────────────────
+    function updateBell(count) {
+      const badge = document.getElementById('notifBadge');
+      if (count > 0) {
+        badge.textContent = count;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+      localStorage.setItem('pendingOrders', count);
+    }
+
+    // ── Change status via dropdown ────────────────────────────────────────────
+    window.changeStatus = async function(id, selectEl) {
+      const newStatus = selectEl.value;
+      try {
+        await updateDoc(doc(db, 'orders', id), { status: newStatus });
+      } catch (err) {
+        alert('Gagal mengubah status: ' + err.message);
+      }
+    };
+
+    // ── Show detail modal ─────────────────────────────────────────────────────
+    window.showDetail = function(id) {
+      const n = normalizedCache[id];
+      if (!n) return;
+      currentDetailOrderId = id;
+
+      const cls = badgeClass[n.status] || '';
+      const lbl = badgeLabel[n.status] || n.status;
+
+      document.getElementById('orderDetailTitle').textContent = `Detail Pesanan #${n.orderCode}`;
+      document.getElementById('orderDetailBody').innerHTML = `
+        <div class="d-flex justify-content-between mb-3 pb-3 border-bottom">
+          <div>
+            <div class="text-muted small">Waktu Pemesanan</div>
+            <div class="fw-medium">${formatTime(n.createdAt)}</div>
+          </div>
+          <div class="text-end">
+            <div class="text-muted small">Status</div>
+            <span class="badge ${cls}">${lbl}</span>
+          </div>
+        </div>
+
+        <h6 class="fw-bold mb-3">Informasi Pembeli</h6>
+        <div class="d-flex align-items-center mb-4">
+          <div class="me-3">
+            <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(n.buyerName||'?')}&background=e2e8f0"
+                 class="rounded-circle" width="40" alt="Buyer">
+          </div>
+          <div>
+            <div class="fw-bold">${n.buyerName}</div>
+            <div class="text-muted small"><i class="fa-brands fa-whatsapp text-success"></i> ${n.buyerPhone || '-'}</div>
+          </div>
+        </div>
+
+        <h6 class="fw-bold mb-3">Rincian Pesanan</h6>
+        <div class="d-flex justify-content-between mb-2">
+          <div>${n.qty}x ${n.itemName}</div>
+          <div class="fw-medium">Rp ${Number(n.subtotal || 0).toLocaleString('id-ID')}</div>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <div>Biaya Layanan</div>
+          <div class="fw-medium">Rp ${Number(n.serviceFee || 0).toLocaleString('id-ID')}</div>
+        </div>
+        <hr>
+        <div class="d-flex justify-content-between mb-4">
+          <div class="fw-bold">Total Pembayaran</div>
+          <div class="fw-bold fs-5" style="color:var(--primary-color)">Rp ${Number(n.totalPrice || 0).toLocaleString('id-ID')}</div>
+        </div>
+
+        <h6 class="fw-bold mb-2">Kode Pickup</h6>
+        <div class="bg-light p-3 rounded text-center mb-3">
+          <h3 class="fw-bold mb-0" style="letter-spacing: 5px;">${n.pickupCode}</h3>
+        </div>`;
+
+      const acceptBtn = document.getElementById('acceptOrderBtn');
+      const rejectBtn = document.getElementById('rejectOrderBtn');
+      if (n.status === 'pending') {
+        acceptBtn.style.display = '';
+        rejectBtn.style.display = '';
+      } else {
+        acceptBtn.style.display = 'none';
+        rejectBtn.style.display = 'none';
+      }
+
+      detailModal.show();
+    };
+
+    // ── Accept / Reject from modal ────────────────────────────────────────────
+    document.getElementById('acceptOrderBtn').addEventListener('click', async () => {
+      if (!currentDetailOrderId) return;
+      await updateDoc(doc(db, 'orders', currentDetailOrderId), { status: 'confirmed' });
+      detailModal.hide();
+    });
+
+    document.getElementById('rejectOrderBtn').addEventListener('click', async () => {
+      if (!currentDetailOrderId) return;
+      await updateDoc(doc(db, 'orders', currentDetailOrderId), { status: 'cancelled' });
+      detailModal.hide();
+    });
+
+    // ── Search filter ─────────────────────────────────────────────────────────
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      document.querySelectorAll('#ordersTableBody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+
+    // ── Init: tunggu auth-guard.js memastikan status login ──────────────────────
+    let started = false;
+    async function startOrdersPage(currentUid) {
+      if (started) return;
+      started = true;
+      uid = currentUid;
+      await loadMyBagIds();
+      listenOrders();
+    }
+    document.addEventListener('sisarasa:authReady', (e) => {
+      if (e.detail.uid) startOrdersPage(e.detail.uid);
+    });
+    if (uid) startOrdersPage(uid);
+  </script>
+</body>
+</html>
