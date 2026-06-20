@@ -114,6 +114,12 @@
               </div>
             </div>
 
+            <div class="alert alert-light border d-flex align-items-center gap-2 mb-3" style="font-size:0.85rem">
+              <i class="fa-solid fa-circle-info text-success"></i>
+              Foto toko & lokasi peta diatur sekali di
+              <a href="settings.html" class="fw-bold">Pengaturan Toko</a>, otomatis berlaku untuk semua menu.
+            </div>
+
             <div class="row g-3 mb-3">
               <div class="col-6">
                 <label class="form-label text-muted">Harga Asli (Rp)</label>
@@ -158,32 +164,6 @@
             <div class="mb-3">
               <label class="form-label text-muted">Deskripsi Magic Bag</label>
               <textarea class="form-control" id="menuDeskripsi" rows="2" placeholder="Ceritakan isi Magic Bag ini..."></textarea>
-            </div>
-
-            <!-- LOKASI PETA -->
-            <div class="mb-2">
-              <label class="form-label text-muted fw-bold">
-                <i class="fa-solid fa-map-location-dot text-success me-1"></i>
-                Titik Lokasi Toko di Peta
-                <span class="sync-badge"><i class="fa-solid fa-mobile-screen me-1"></i>Tampil di Aplikasi</span>
-              </label>
-              <p class="map-hint">Klik di peta untuk menentukan lokasi toko. Pin akan muncul di aplikasi mobile pengguna.</p>
-              <div id="pickLocationMap"></div>
-              <div class="coord-display">
-                <div class="flex-fill">
-                  <label class="form-label text-muted small mb-1">Latitude</label>
-                  <input type="text" class="form-control form-control-sm" id="menuLat" readonly placeholder="Klik peta...">
-                </div>
-                <div class="flex-fill">
-                  <label class="form-label text-muted small mb-1">Longitude</label>
-                  <input type="text" class="form-control form-control-sm" id="menuLng" readonly placeholder="Klik peta...">
-                </div>
-                <div class="d-flex align-items-end pb-1">
-                  <button type="button" class="btn btn-sm btn-outline-secondary" id="pasteFromSettingsBtn" title="Pakai koordinat dari Pengaturan Toko">
-                    <i class="fa-solid fa-paste"></i> Dari Settings
-                  </button>
-                </div>
-              </div>
             </div>
 
             <div class="form-check form-switch mt-3">
@@ -305,9 +285,12 @@
       const lokasiIcon = (data.lat && data.lng)
         ? `<span class="text-success" title="${data.lat}, ${data.lng}"><i class="fa-solid fa-location-dot"></i> Ada</span>`
         : `<span class="text-muted"><i class="fa-solid fa-location-dot"></i> -</span>`;
+      const thumb = data.imageUrl
+        ? `<img src="${data.imageUrl}" style="width:36px;height:36px;border-radius:8px;object-fit:cover;margin-right:8px" onerror="this.style.display='none'">`
+        : `<span style="margin-right:8px">${data.emoji || '🛍️'}</span>`;
       return `
         <tr id="row-${id}">
-          <td class="fw-medium">${data.emoji || '🛍️'} ${data.name}</td>
+          <td class="fw-medium d-flex align-items-center">${thumb}${data.name}</td>
           <td><span class="text-decoration-line-through text-muted small">Rp ${Number(data.originalPrice).toLocaleString('id-ID')}</span></td>
           <td class="text-success fw-bold">Rp ${Number(data.discountPrice).toLocaleString('id-ID')}</td>
           <td>${data.pickupStart} - ${data.pickupEnd}</td>
@@ -340,6 +323,43 @@
       });
     }
 
+    // ── Ekstrak URL gambar asli dari link Google Images (imgres?imgurl=...) ────
+    function extractRealImageUrl(rawUrl) {
+      try {
+        if (rawUrl.includes('google.com/imgres')) {
+          const u = new URL(rawUrl);
+          const real = u.searchParams.get('imgurl');
+          if (real) return decodeURIComponent(real);
+        }
+      } catch (e) {}
+      return rawUrl;
+    }
+
+    // ── Preview foto menu ───────────────────────────────────────────────────────
+    window.previewMenuImage = function() {
+      const input = document.getElementById('menuImageUrl');
+      let url = input.value.trim();
+
+      // Auto-fix: kalau ternyata link Google Images, ganti ke URL asli
+      const fixed = extractRealImageUrl(url);
+      if (fixed !== url) {
+        url = fixed;
+        input.value = fixed;
+      }
+
+      const img = document.getElementById('menuImagePreview');
+      const placeholder = document.getElementById('menuImagePlaceholder');
+      if (url) {
+        img.src = url;
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+        img.onerror = () => { img.style.display = 'none'; placeholder.style.display = ''; };
+      } else {
+        img.style.display = 'none';
+        placeholder.style.display = '';
+      }
+    };
+
     // ── Buka modal Tambah ──────────────────────────────────────────────────────
     document.getElementById('openAddModalBtn').addEventListener('click', () => {
       document.getElementById('mbModalLabel').textContent = 'Tambah Menu';
@@ -349,6 +369,8 @@
       document.getElementById('menuIsActive').checked = true;
       document.getElementById('menuEmoji').value = '🛍️';
       document.getElementById('menuKategori').value = 'Makanan Berat';
+      document.getElementById('menuImageUrl').value = '';
+      previewMenuImage();
       new bootstrap.Modal(document.getElementById('mbModal')).show();
       initPickMap(storeInfo.lat, storeInfo.lng);
     });
@@ -370,6 +392,8 @@
       document.getElementById('menuKategori').value = data.kategori || 'Makanan Berat';
       document.getElementById('menuDeskripsi').value = data.deskripsi || '';
       document.getElementById('menuIsActive').checked = data.isActive;
+      document.getElementById('menuImageUrl').value = data.imageUrl || '';
+      previewMenuImage();
       new bootstrap.Modal(document.getElementById('mbModal')).show();
       const lat = data.lat || storeInfo.lat;
       const lng = data.lng || storeInfo.lng;
@@ -386,11 +410,13 @@
       const lng = parseFloat(document.getElementById('menuLng').value) || storeInfo.lng;
       const pickupStart = document.getElementById('menuPickupStart').value;
       const pickupEnd = document.getElementById('menuPickupEnd').value;
+      const imageUrl = document.getElementById('menuImageUrl').value.trim();
 
       // Payload untuk stores/{uid}/menus
       const menuPayload = {
         name: document.getElementById('menuName').value,
         emoji: document.getElementById('menuEmoji').value || '🛍️',
+        imageUrl,
         originalPrice: Number(document.getElementById('menuOriginalPrice').value),
         discountPrice: Number(document.getElementById('menuDiscountPrice').value),
         pickupStart,
@@ -406,7 +432,9 @@
       // Payload untuk magic_bags (global, dibaca app)
       const magicBagPayload = {
         tokoNama: storeInfo.name,
+        namaMenu: menuPayload.name,
         emoji: menuPayload.emoji,
+        imageUrl,
         kategori: menuPayload.kategori,
         harga: menuPayload.discountPrice,
         hargaAsli: menuPayload.originalPrice,

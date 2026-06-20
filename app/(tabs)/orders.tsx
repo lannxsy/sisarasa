@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, FlatList, StyleSheet, useColorScheme,
-  Pressable, Modal, ActivityIndicator, Linking,
+  Pressable, Modal, ActivityIndicator, Linking, Image,
 } from 'react-native';
 import { collection, onSnapshot, query, orderBy, where, doc, getDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,8 @@ import { COLORS } from '@/constants/theme';
 interface Order {
   id: string;
   tokoNama: string;
+  namaMenu?: string;
+  imageUrl?: string;
   harga: number;
   status: 'pending' | 'confirmed' | 'selesai' | 'batal';
   createdAt: number;
@@ -96,10 +98,17 @@ export default function OrdersScreen() {
         onPress={() => setQrModal(item)}
       >
         <View style={styles.cardEmoji}>
-          <ThemedText style={styles.emoji}>{item.emoji || '🛍️'}</ThemedText>
+          {item.imageUrl ? (
+            <Image source={{ uri: item.imageUrl }} style={styles.cardImage} resizeMode="cover" />
+          ) : (
+            <ThemedText style={styles.emoji}>{item.emoji || '🛍️'}</ThemedText>
+          )}
         </View>
         <View style={{ flex: 1 }}>
           <ThemedText style={styles.tokoName}>{item.tokoNama}</ThemedText>
+          {item.namaMenu ? (
+            <ThemedText style={styles.menuName}>{item.namaMenu}</ThemedText>
+          ) : null}
           <ThemedText style={styles.sub}>
             {item.jumlah}x Magic Bag • Rp {item.harga.toLocaleString('id-ID')}
           </ThemedText>
@@ -152,6 +161,9 @@ export default function OrdersScreen() {
 
             <ThemedText style={styles.modalTitle}>Kode Pickup</ThemedText>
             <ThemedText style={styles.modalToko}>{qrModal?.tokoNama}</ThemedText>
+            {qrModal?.namaMenu ? (
+              <ThemedText style={styles.modalMenuName}>{qrModal.namaMenu}</ThemedText>
+            ) : null}
 
             {/* QR dummy */}
             <View style={styles.qrWrap}>
@@ -262,9 +274,12 @@ const styles = StyleSheet.create({
     width: 50, height: 50, borderRadius: 12,
     backgroundColor: COLORS.primaryLight,
     justifyContent: 'center', alignItems: 'center', marginRight: 12,
+    overflow: 'hidden',
   },
+  cardImage: { width: '100%', height: '100%' },
   emoji: { fontSize: 24 },
   tokoName: { fontSize: 14, fontWeight: '700' },
+  menuName: { fontSize: 12, fontWeight: '600', color: COLORS.primaryDark, marginTop: 1 },
   sub: { fontSize: 12, color: COLORS.gray400, marginTop: 2 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   badgeText: { fontSize: 11, fontWeight: '700' },
@@ -286,7 +301,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.gray200, marginBottom: 20,
   },
   modalTitle: { fontSize: 20, fontWeight: '800', marginBottom: 4 },
-  modalToko: { fontSize: 13, color: COLORS.gray400, marginBottom: 20 },
+  modalToko: { fontSize: 13, color: COLORS.gray400, marginBottom: 2 },
+  modalMenuName: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginBottom: 18 },
 
   // QR
   qrWrap: {

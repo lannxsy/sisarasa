@@ -1,19 +1,19 @@
 import { useRouter } from 'expo-router';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View, useColorScheme,
+  ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View, useColorScheme, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { auth, db } from '../lib/firebase';
-import { addFavorite, favoritesCollection, removeFavorite } from '../lib/favorites';
+import { db } from '../lib/firebase';
 import { COLORS } from '@/constants/theme';
 
 interface MagicBag {
   id: string;
   tokoNama: string;
+  namaMenu?: string;
   kategori: string;
   harga: number;
   hargaAsli: number;
@@ -21,7 +21,26 @@ interface MagicBag {
   jamPickup: string;
   deskripsi: string;
   emoji: string;
+  imageUrl?: string;
   alamat?: string;
+  lat?: number;
+  lng?: number;
+  storeId?: string;
+}
+
+interface TokoGroup {
+  storeId: string;
+  tokoNama: string;
+  imageUrl?: string;
+  emoji: string;
+  alamat?: string;
+  kategoriList: string[];
+  totalMenu: number;
+  totalStok: number;
+  hargaTermurah: number;
+  jamPickup: string;
+  lat?: number;
+  lng?: number;
 }
 
 export default function TokoScreen() {
@@ -30,8 +49,6 @@ export default function TokoScreen() {
   const [bags, setBags] = useState<MagicBag[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
-  const userId = auth.currentUser?.uid;
 
   useEffect(() => {
     const q = query(collection(db, 'magic_bags'), orderBy('createdAt', 'desc'));
@@ -42,89 +59,78 @@ export default function TokoScreen() {
     return unsub;
   }, []);
 
-  useEffect(() => {
-    if (!userId) {
-      setFavoriteIds(new Set());
-      return;
+  // Group magic_bags berdasarkan storeId (fallback: tokoNama kalau storeId kosong)
+  const tokoGroups: TokoGroup[] = React.useMemo(() => {
+    const map = new Map<string, TokoGroup>();
+    for (const bag of bags) {
+      if (bag.stok <= 0) continue;
+      const key = bag.storeId || bag.tokoNama;
+      const existing = map.get(key);
+      if (existing) {
+        existing.totalMenu += 1;
+        existing.totalStok += bag.stok;
+        if (bag.harga < existing.hargaTermurah) existing.hargaTermurah = bag.harga;
+        if (!existing.kategoriList.includes(bag.kategori)) existing.kategoriList.push(bag.kategori);
+        if (!existing.imageUrl && bag.imageUrl) existing.imageUrl = bag.imageUrl;
+      } else {
+        map.set(key, {
+          storeId: key,
+          tokoNama: bag.tokoNama,
+          imageUrl: bag.imageUrl,
+          emoji: bag.emoji || '🏪',
+          alamat: bag.alamat,
+          kategoriList: [bag.kategori],
+          totalMenu: 1,
+          totalStok: bag.stok,
+          hargaTermurah: bag.harga,
+          jamPickup: bag.jamPickup,
+          lat: bag.lat,
+          lng: bag.lng,
+        });
+      }
     }
-    const q = query(favoritesCollection(), where('userId', '==', userId));
-    const unsub = onSnapshot(q, (snap) => {
-      setFavoriteIds(new Set(snap.docs.map((d) => d.data().bagId as string)));
-    });
-    return unsub;
-  }, [userId]);
+    return Array.from(map.values());
+  }, [bags]);
 
-  const toggleFavorite = async (item: MagicBag) => {
-    if (!userId) return;
-    if (favoriteIds.has(item.id)) {
-      await removeFavorite(userId, item.id);
-    } else {
-      await addFavorite(userId, item.id, {
-        tokoNama: item.tokoNama,
-        kategori: item.kategori,
-        harga: item.harga,
-        hargaAsli: item.hargaAsli,
-        emoji: item.emoji,
-        jamPickup: item.jamPickup,
-        alamat: item.alamat,
-      });
-    }
-  };
-
-  const filtered = bags.filter(
-    (b) =>
-      b.tokoNama.toLowerCase().includes(search.toLowerCase()) ||
-      b.kategori.toLowerCase().includes(search.toLowerCase())
+  const filtered = tokoGroups.filter(
+    (t) =>
+      t.tokoNama.toLowerCase().includes(search.toLowerCase()) ||
+      t.kategoriList.some((k) => k.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const renderItem = ({ item }: { item: MagicBag }) => {
-    const isFav = favoriteIds.has(item.id);
-    const habis = item.stok <= 0;
-    return (
-      <Pressable
-        style={[styles.card, { backgroundColor: isDark ? COLORS.gray800 : COLORS.white, opacity: habis ? 0.6 : 1 }]}
-        onPress={() => router.push({ pathname: '/detail', params: { id: item.id } })}
-        disabled={habis}
-      >
-        <View style={styles.cardEmoji}>
-          <ThemedText style={styles.emoji}>{item.emoji || '🛍️'}</ThemedText>
+  const renderItem = ({ item }: { item: TokoGroup }) => (
+    <Pressable
+      style={[styles.card, { backgroundColor: isDark ? COLORS.gray800 : COLORS.white }]}
+      onPress={() => router.push({ pathname: '/toko-detail', params: { storeId: item.storeId } })}
+    >
+      <View style={styles.cardImageWrap}>
+        {item.imageUrl ? (
+          <Image source={{ uri: item.imageUrl }} style={styles.cardImage} resizeMode="cover" />
+        ) : (
+          <ThemedText style={styles.emoji}>{item.emoji}</ThemedText>
+        )}
+      </View>
+      <View style={{ flex: 1 }}>
+        <ThemedText style={styles.tokoName}>{item.tokoNama}</ThemedText>
+        <ThemedText style={styles.kategori} numberOfLines={1}>
+          {item.kategoriList.join(', ')}
+        </ThemedText>
+        <View style={styles.pickupRow}>
+          <Ionicons name="time-outline" size={12} color={COLORS.gray400} />
+          <ThemedText style={styles.pickupText}> {item.jamPickup}</ThemedText>
         </View>
-        <View style={{ flex: 1 }}>
-          <ThemedText style={styles.tokoName}>{item.tokoNama}</ThemedText>
-          <ThemedText style={styles.kategori}>{item.kategori}</ThemedText>
-          <View style={styles.pickupRow}>
-            <Ionicons name="time-outline" size={12} color={COLORS.gray400} />
-            <ThemedText style={styles.pickupText}> {item.jamPickup}</ThemedText>
-          </View>
-          <View style={styles.priceRow}>
-            <ThemedText style={styles.harga}>Rp {item.harga.toLocaleString('id-ID')}</ThemedText>
-            <ThemedText style={styles.hargaAsli}>Rp {item.hargaAsli.toLocaleString('id-ID')}</ThemedText>
-          </View>
+        <ThemedText style={styles.hargaMulai}>
+          Mulai Rp {item.hargaTermurah.toLocaleString('id-ID')}
+        </ThemedText>
+      </View>
+      <View style={{ alignItems: 'flex-end', gap: 6 }}>
+        <View style={styles.menuBadge}>
+          <ThemedText style={styles.menuBadgeText}>{item.totalMenu} menu</ThemedText>
         </View>
-        <View style={{ alignItems: 'flex-end', gap: 6 }}>
-          <Pressable
-            style={styles.heartBtn}
-            onPress={(e) => {
-              e.stopPropagation();
-              toggleFavorite(item);
-            }}
-            hitSlop={8}
-          >
-            <Ionicons
-              name={isFav ? 'heart' : 'heart-outline'}
-              size={20}
-              color={isFav ? COLORS.danger : COLORS.gray400}
-            />
-          </Pressable>
-          <View style={[styles.stokBadge, habis && { backgroundColor: '#fee2e2' }]}>
-            <ThemedText style={[styles.stokText, habis && { color: COLORS.danger }]}>
-              {habis ? 'Habis' : `${item.stok} sisa`}
-            </ThemedText>
-          </View>
-        </View>
-      </Pressable>
-    );
-  };
+        <Ionicons name="chevron-forward" size={18} color={COLORS.gray400} />
+      </View>
+    </Pressable>
+  );
 
   return (
     <ThemedView style={styles.container}>
@@ -146,16 +152,16 @@ export default function TokoScreen() {
       {loading ? (
         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : filtered.length === 0 ? (
-        <View style={styles.emptyWrap}>
+        <View style={styles.empty}>
           <ThemedText style={{ fontSize: 48 }}>🔍</ThemedText>
           <ThemedText style={styles.emptyText}>Toko tidak ditemukan</ThemedText>
         </View>
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={(i) => i.id}
+          keyExtractor={(i) => i.storeId}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -167,21 +173,36 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 20 },
   headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
-  searchBar: { marginHorizontal: 16, marginTop: 14, marginBottom: 6, flexDirection: 'row', alignItems: 'center', borderRadius: 14, paddingHorizontal: 14, height: 44 },
+  searchBar: {
+    marginHorizontal: 16, marginTop: 14, marginBottom: 6,
+    flexDirection: 'row', alignItems: 'center', borderRadius: 14,
+    paddingHorizontal: 14, height: 44,
+  },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 14 },
-  card: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 12, marginBottom: 10, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6 },
-  cardEmoji: { width: 50, height: 50, borderRadius: 12, backgroundColor: COLORS.primaryLight, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  card: {
+    flexDirection: 'row', alignItems: 'center', borderRadius: 16,
+    padding: 12, marginBottom: 10, elevation: 2,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 6,
+  },
+  cardImageWrap: {
+    width: 56, height: 56, borderRadius: 14,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center', alignItems: 'center', marginRight: 12,
+    overflow: 'hidden',
+  },
+  cardImage: { width: '100%', height: '100%' },
   emoji: { fontSize: 26 },
-  tokoName: { fontSize: 14, fontWeight: '700' },
-  kategori: { fontSize: 11, color: COLORS.gray400, marginTop: 1 },
+  tokoName: { fontSize: 15, fontWeight: '700' },
+  kategori: { fontSize: 11, color: COLORS.gray400, marginTop: 2 },
   pickupRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
   pickupText: { fontSize: 11, color: COLORS.gray400 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
-  harga: { fontSize: 14, fontWeight: '800', color: COLORS.primary },
-  hargaAsli: { fontSize: 11, color: COLORS.gray400, textDecorationLine: 'line-through' },
-  stokBadge: { backgroundColor: COLORS.primaryLight, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
-  stokText: { fontSize: 11, fontWeight: '700', color: COLORS.primaryDark },
-  heartBtn: { padding: 4 },
-  emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 60 },
+  hargaMulai: { fontSize: 13, fontWeight: '800', color: COLORS.primary, marginTop: 4 },
+  menuBadge: {
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+  },
+  menuBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.primaryDark },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   emptyText: { fontSize: 14, color: COLORS.gray400 },
 });

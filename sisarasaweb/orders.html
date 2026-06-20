@@ -94,13 +94,30 @@
     </div>
   </div>
 
+  <!-- Delete Order Confirmation Modal -->
+  <div class="modal fade" id="deleteOrderModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+      <div class="modal-content" style="border-radius:16px;border:none">
+        <div class="modal-body text-center p-4">
+          <i class="fa-solid fa-triangle-exclamation fs-1 text-warning mb-3"></i>
+          <h5 class="fw-bold">Hapus Pesanan?</h5>
+          <p class="text-muted small" id="deleteOrderMsg">Pesanan ini akan dihapus permanen.</p>
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-light flex-fill" data-bs-dismiss="modal">Batal</button>
+            <button class="btn btn-danger flex-fill" id="confirmDeleteOrderBtn">Hapus</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="assets/js/main.js"></script>
   <script type="module" src="assets/js/auth-guard.js"></script>
   <script type="module">
     import { db } from './assets/js/firebase-config.js';
     import {
-      collection, doc, query, orderBy, onSnapshot, updateDoc, where, getDocs
+      collection, doc, query, orderBy, onSnapshot, updateDoc, where, getDocs, deleteDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     let uid = localStorage.getItem('userUid');
@@ -138,6 +155,8 @@
         buyerName: data.buyerName || data.userEmail || '-',
         buyerPhone: data.buyerPhone || '',
         itemName: data.itemName || data.tokoNama || '-',
+        emoji: data.emoji || '🛍️',
+        imageUrl: data.imageUrl || '',
         qty: data.qty || data.jumlah || 1,
         subtotal: data.subtotal ?? data.harga ?? data.totalPrice ?? 0,
         serviceFee: data.serviceFee || 0,
@@ -164,12 +183,15 @@
     function renderRow(id, n) {
       const cls = badgeClass[n.status] || '';
       const lbl = badgeLabel[n.status] || n.status;
+      const thumb = n.imageUrl
+        ? `<img src="${n.imageUrl}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;margin-right:6px" onerror="this.style.display='none'">`
+        : `<span style="margin-right:6px">${n.emoji}</span>`;
       return `
         <tr id="row-${id}">
           <td class="fw-bold">#${n.orderCode}</td>
           <td>${formatTime(n.createdAt)}</td>
           <td>${n.buyerName}</td>
-          <td class="text-muted small">${n.itemName} x${n.qty}</td>
+          <td class="text-muted small d-flex align-items-center">${thumb}${n.itemName} x${n.qty}</td>
           <td class="fw-bold">Rp ${Number(n.totalPrice || 0).toLocaleString('id-ID')}</td>
           <td><span class="badge ${cls}" id="badge-${id}">${lbl}</span></td>
           <td>
@@ -180,7 +202,8 @@
                 <option value="completed" ${n.status==='completed'?'selected':''}>Selesai</option>
                 <option value="cancelled" ${n.status==='cancelled'?'selected':''}>Batal</option>
               </select>
-              <button class="btn btn-sm btn-light py-1" onclick="showDetail('${id}')">Detail</button>
+              <button class="btn btn-sm btn-light py-1" onclick="showDetail('${id}')" title="Detail"><i class="fa-solid fa-eye"></i></button>
+              <button class="btn btn-sm btn-light text-danger py-1" onclick="promptDeleteOrder('${id}')" title="Hapus"><i class="fa-solid fa-trash"></i></button>
             </div>
           </td>
         </tr>`;
@@ -249,6 +272,27 @@
       }
     };
 
+    // ── Hapus pesanan ──────────────────────────────────────────────────────────
+    let orderToDelete = null;
+    window.promptDeleteOrder = function(id) {
+      orderToDelete = id;
+      const n = normalizedCache[id];
+      const msg = n ? `Hapus pesanan #${n.orderCode} dari ${n.buyerName}?` : 'Hapus pesanan ini?';
+      document.getElementById('deleteOrderMsg').textContent = msg;
+      new bootstrap.Modal(document.getElementById('deleteOrderModal')).show();
+    };
+
+    document.getElementById('confirmDeleteOrderBtn').addEventListener('click', async () => {
+      if (!orderToDelete) return;
+      try {
+        await deleteDoc(doc(db, 'orders', orderToDelete));
+        bootstrap.Modal.getInstance(document.getElementById('deleteOrderModal')).hide();
+        orderToDelete = null;
+      } catch (err) {
+        alert('Gagal menghapus pesanan: ' + err.message);
+      }
+    });
+
     // ── Show detail modal ─────────────────────────────────────────────────────
     window.showDetail = function(id) {
       const n = normalizedCache[id];
@@ -284,6 +328,16 @@
         </div>
 
         <h6 class="fw-bold mb-3">Rincian Pesanan</h6>
+        <div class="d-flex align-items-center gap-3 mb-3">
+          ${n.imageUrl
+            ? `<img src="${n.imageUrl}" style="width:56px;height:56px;border-radius:10px;object-fit:cover" onerror="this.style.display='none'">`
+            : `<div style="width:56px;height:56px;border-radius:10px;background:#dcfce7;display:flex;align-items:center;justify-content:center;font-size:26px">${n.emoji}</div>`
+          }
+          <div>
+            <div class="fw-bold">${n.itemName}</div>
+            <div class="text-muted small">Jumlah: ${n.qty}x Magic Bag</div>
+          </div>
+        </div>
         <div class="d-flex justify-content-between mb-2">
           <div>${n.qty}x ${n.itemName}</div>
           <div class="fw-medium">Rp ${Number(n.subtotal || 0).toLocaleString('id-ID')}</div>

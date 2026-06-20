@@ -22,6 +22,7 @@ interface MagicBag {
   jamPickup: string;
   deskripsi: string;
   emoji: string;
+  imageUrl?: string;
   alamat?: string;
   lat?: number;
   lng?: number;

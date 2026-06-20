@@ -81,6 +81,21 @@
             </div>
 
             <div class="mb-4">
+              <label class="form-label text-muted fw-bold"><i class="fa-solid fa-image text-success me-1"></i> URL Foto Toko</label>
+              <p class="small text-muted mb-2">
+                Klik kanan foto di Google Images → <b>"Buka gambar di tab baru"</b> → copy URL dari address bar (harus diakhiri .jpg/.png/.webp).
+                Foto ini akan tampil di header toko pada aplikasi.
+              </p>
+              <div class="d-flex gap-2 align-items-start">
+                <input type="url" class="form-control" id="storeImageUrl" placeholder="https://contoh.com/foto-toko.jpg" oninput="previewStoreImage()">
+                <div id="storeImagePreviewWrap" style="width:80px;height:80px;border-radius:12px;border:1px solid #e2e8f0;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f8fafc;">
+                  <img id="storeImagePreview" src="" style="width:100%;height:100%;object-fit:cover;display:none;">
+                  <i class="fa-solid fa-store text-muted" id="storeImagePlaceholder" style="font-size:1.5rem"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-4">
               <label class="form-label text-muted fw-bold"><i class="fa-solid fa-map-location-dot"></i> Titik Lokasi Peta (Koordinat GPS)</label>
               <p class="small text-muted mb-2">Geser pin merah ke lokasi persis toko Anda agar akurat di aplikasi mobile pengguna (Terintegrasi Firestore nantinya).</p>
               <div id="storeMap" style="height: 400px; width: 100%; border-radius: 12px; border: 1px solid #e2e8f0;"></div>
@@ -133,7 +148,9 @@
   <script type="module" src="assets/js/auth-guard.js"></script>
   <script type="module">
     import { db } from './assets/js/firebase-config.js';
-    import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      doc, getDoc, setDoc, collection, query, where, getDocs, writeBatch
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     let storeId = localStorage.getItem('userUid');
     const storeRef = () => doc(db, "stores", storeId);
@@ -141,10 +158,44 @@
     const storeNameInput = document.getElementById('storeName');
     const storePhoneInput = document.getElementById('storePhone');
     const storeAddressInput = document.getElementById('storeAddress');
+    const storeImageUrlInput = document.getElementById('storeImageUrl');
     const latitudeInput = document.getElementById('latitude');
     const longitudeInput = document.getElementById('longitude');
     const storeStatusInput = document.getElementById('storeStatus');
     const saveBtn = document.getElementById('saveStoreBtn');
+
+    // ── Ekstrak URL gambar asli dari link Google Images (imgres?imgurl=...) ────
+    function extractRealImageUrl(rawUrl) {
+      try {
+        if (rawUrl.includes('google.com/imgres')) {
+          const u = new URL(rawUrl);
+          const real = u.searchParams.get('imgurl');
+          if (real) return decodeURIComponent(real);
+        }
+      } catch (e) {}
+      return rawUrl;
+    }
+
+    // ── Preview foto toko ────────────────────────────────────────────────────────
+    window.previewStoreImage = function() {
+      let url = storeImageUrlInput.value.trim();
+      const fixed = extractRealImageUrl(url);
+      if (fixed !== url) {
+        url = fixed;
+        storeImageUrlInput.value = fixed;
+      }
+      const img = document.getElementById('storeImagePreview');
+      const placeholder = document.getElementById('storeImagePlaceholder');
+      if (url) {
+        img.src = url;
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+        img.onerror = () => { img.style.display = 'none'; placeholder.style.display = ''; };
+      } else {
+        img.style.display = 'none';
+        placeholder.style.display = '';
+      }
+    };
 
     // Fungsi Load Data
     let fetchedStoreLatLng = null; // cache koordinat tersimpan, dipakai begitu map siap
@@ -168,6 +219,8 @@
           storeNameInput.value = data.name || "";
           storePhoneInput.value = data.phone || "";
           storeAddressInput.value = data.address || "";
+          storeImageUrlInput.value = data.imageUrl || "";
+          previewStoreImage();
           
           if(data.latitude) latitudeInput.value = data.latitude;
           if(data.longitude) longitudeInput.value = data.longitude;
@@ -206,21 +259,42 @@
       saveBtn.disabled = true;
 
       try {
-        await setDoc(storeRef(), {
+        const storeData = {
           name: storeNameInput.value,
           phone: storePhoneInput.value,
           address: storeAddressInput.value,
+          imageUrl: storeImageUrlInput.value.trim(),
           latitude: parseFloat(latitudeInput.value),
           longitude: parseFloat(longitudeInput.value),
           isActive: storeStatusInput ? storeStatusInput.checked : true,
           updatedAt: new Date()
-        }, { merge: true });
+        };
+
+        await setDoc(storeRef(), storeData, { merge: true });
+
+        // Sinkronkan ke SEMUA magic_bags milik toko ini, supaya foto, lokasi,
+        // alamat, dan nama toko selalu konsisten di semua menu sekaligus.
+        const q = query(collection(db, 'magic_bags'), where('storeId', '==', storeId));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const batch = writeBatch(db);
+          snap.forEach((docSnap) => {
+            batch.update(docSnap.ref, {
+              tokoNama: storeData.name,
+              imageUrl: storeData.imageUrl,
+              alamat: storeData.address,
+              lat: storeData.latitude,
+              lng: storeData.longitude,
+            });
+          });
+          await batch.commit();
+        }
 
         // Sinkronkan cache localStorage supaya halaman lain (sidebar/header)
         // langsung menampilkan nama toko terbaru tanpa perlu logout-login.
         localStorage.setItem('storeName', storeNameInput.value);
 
-        alert("Berhasil menyimpan profil toko ke Firestore!");
+        alert("Berhasil menyimpan profil toko! Semua menu ikut diperbarui.");
       } catch (error) {
         console.error("Error writing document: ", error);
         alert("Gagal menyimpan data: " + error.message);

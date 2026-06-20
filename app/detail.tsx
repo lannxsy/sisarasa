@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Pressable, useColorScheme, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Pressable, useColorScheme, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc, addDoc, collection, updateDoc, increment } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,7 @@ import { COLORS } from '@/constants/theme';
 interface MagicBag {
   id: string;
   tokoNama: string;
+  namaMenu?: string;
   kategori: string;
   harga: number;
   hargaAsli: number;
@@ -20,6 +21,7 @@ interface MagicBag {
   jamPickup: string;
   deskripsi: string;
   emoji: string;
+  imageUrl?: string;
   alamat?: string;
   lat?: number;
   lng?: number;
@@ -118,7 +120,9 @@ export default function DetailScreen() {
         userEmail: auth.currentUser.email,
         bagId: bag.id,
         tokoNama: bag.tokoNama,
+        namaMenu: bag.namaMenu || bag.tokoNama,
         emoji: bag.emoji,
+        imageUrl: bag.imageUrl || '',
         harga: bag.harga * jumlah,
         jumlah,
         status: 'pending',
@@ -160,10 +164,15 @@ export default function DetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Hero */}
         <View style={[styles.hero, { backgroundColor: COLORS.primary }]}>
+          {bag.imageUrl ? (
+            <Image source={{ uri: bag.imageUrl }} style={styles.heroImage} resizeMode="cover" />
+          ) : null}
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
           </Pressable>
-          <ThemedText style={styles.heroEmoji}>{bag.emoji || '🛍️'}</ThemedText>
+          {!bag.imageUrl && (
+            <ThemedText style={styles.heroEmoji}>{bag.emoji || '🛍️'}</ThemedText>
+          )}
           <Pressable style={styles.favBtn} onPress={toggleFavorite} disabled={favLoading} hitSlop={8}>
             <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={22} color={isFav ? '#ef4444' : '#fff'} />
           </Pressable>
@@ -175,25 +184,33 @@ export default function DetailScreen() {
         <View style={styles.content}>
           {/* Judul + stok */}
           <View style={styles.titleRow}>
-            <ThemedText style={styles.tokoName}>{bag.tokoNama}</ThemedText>
+            <ThemedText style={[styles.tokoName, { color: isDark ? '#fff' : COLORS.dark }]}>
+              {bag.namaMenu || bag.kategori}
+            </ThemedText>
             <View style={[styles.stokBadge, { backgroundColor: bag.stok > 2 ? COLORS.primaryLight : '#fef3c7' }]}>
               <ThemedText style={[styles.stokText, { color: bag.stok > 2 ? COLORS.primaryDark : '#92400e' }]}>
                 {bag.stok} sisa
               </ThemedText>
             </View>
           </View>
-          <ThemedText style={styles.kategori}>{bag.kategori}</ThemedText>
+          <View style={styles.tokoSubRow}>
+            <Ionicons name="storefront-outline" size={13} color={isDark ? '#86efac' : COLORS.primaryDark} />
+            <ThemedText style={[styles.menuName, { color: isDark ? '#86efac' : COLORS.primaryDark }]}>
+              {' '}{bag.tokoNama}
+            </ThemedText>
+          </View>
+          <ThemedText style={[styles.kategori, { color: isDark ? '#cbd5e1' : COLORS.gray400 }]}>{bag.kategori}</ThemedText>
 
           {/* Info */}
           <View style={[styles.infoCard, { backgroundColor: isDark ? COLORS.gray800 : COLORS.gray100 }]}>
             <View style={styles.infoRow}>
-              <Ionicons name="time-outline" size={15} color={COLORS.gray600} />
-              <ThemedText style={styles.infoText}>Pickup: {bag.jamPickup}</ThemedText>
+              <Ionicons name="time-outline" size={15} color={isDark ? '#cbd5e1' : COLORS.gray600} />
+              <ThemedText style={[styles.infoText, { color: isDark ? '#e2e8f0' : COLORS.gray600 }]}>Pickup: {bag.jamPickup}</ThemedText>
             </View>
             {bag.alamat && (
               <View style={styles.infoRow}>
-                <Ionicons name="location-outline" size={15} color={COLORS.gray600} />
-                <ThemedText style={styles.infoText}>{bag.alamat}</ThemedText>
+                <Ionicons name="location-outline" size={15} color={isDark ? '#cbd5e1' : COLORS.gray600} />
+                <ThemedText style={[styles.infoText, { color: isDark ? '#e2e8f0' : COLORS.gray600 }]}>{bag.alamat}</ThemedText>
               </View>
             )}
           </View>
@@ -201,7 +218,7 @@ export default function DetailScreen() {
           {/* Mini Map */}
           {hasMap && (
             <>
-              <ThemedText style={styles.sectionLabel}>Lokasi Toko</ThemedText>
+              <ThemedText style={[styles.sectionLabel, { color: isDark ? '#fff' : COLORS.gray600 }]}>Lokasi Toko</ThemedText>
               <View style={styles.miniMapWrap}>
                 <WebView
                   source={{ html: buatMiniMap(bag.lat!, bag.lng!, bag.tokoNama, bag.emoji || '🛍️') }}
@@ -214,11 +231,13 @@ export default function DetailScreen() {
           )}
 
           {/* Deskripsi */}
-          <ThemedText style={styles.sectionLabel}>Deskripsi</ThemedText>
-          <ThemedText style={styles.deskripsi}>{bag.deskripsi}</ThemedText>
+          <ThemedText style={[styles.sectionLabel, { color: isDark ? '#fff' : COLORS.gray600 }]}>Deskripsi</ThemedText>
+          <ThemedText style={[styles.deskripsi, { color: isDark ? '#e2e8f0' : COLORS.gray600 }]}>
+            {bag.deskripsi || 'Tidak ada deskripsi untuk Magic Bag ini.'}
+          </ThemedText>
 
           {/* Jumlah */}
-          <ThemedText style={styles.sectionLabel}>Jumlah</ThemedText>
+          <ThemedText style={[styles.sectionLabel, { color: isDark ? '#fff' : COLORS.gray600 }]}>Jumlah</ThemedText>
           <View style={styles.qtyRow}>
             <Pressable
               style={[styles.qtyBtn, { backgroundColor: isDark ? COLORS.gray800 : COLORS.gray100 }]}
@@ -226,7 +245,7 @@ export default function DetailScreen() {
             >
               <Ionicons name="remove" size={20} color={COLORS.primary} />
             </Pressable>
-            <ThemedText style={styles.qtyText}>{jumlah}</ThemedText>
+            <ThemedText style={[styles.qtyText, { color: isDark ? '#fff' : COLORS.dark }]}>{jumlah}</ThemedText>
             <Pressable
               style={[styles.qtyBtn, { backgroundColor: isDark ? COLORS.gray800 : COLORS.gray100 }]}
               onPress={() => setJumlah(Math.min(bag.stok, jumlah + 1))}
@@ -261,7 +280,8 @@ export default function DetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  hero: { height: 200, justifyContent: 'center', alignItems: 'center' },
+  hero: { height: 200, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  heroImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
   backBtn: { position: 'absolute', top: 52, left: 16, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 8 },
   favBtn: { position: 'absolute', top: 52, right: 16, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 8 },
   heroEmoji: { fontSize: 72 },
@@ -272,6 +292,8 @@ const styles = StyleSheet.create({
   tokoName: { fontSize: 20, fontWeight: '800', flex: 1 },
   stokBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 8 },
   stokText: { fontSize: 11, fontWeight: '700' },
+  menuName: { fontSize: 14, fontWeight: '600', marginTop: 2 },
+  tokoSubRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
   kategori: { fontSize: 13, color: COLORS.gray400, marginBottom: 14 },
   infoCard: { borderRadius: 12, padding: 12, gap: 8, marginBottom: 16 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
