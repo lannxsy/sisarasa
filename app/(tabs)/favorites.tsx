@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,10 +27,25 @@ export default function FavoritesScreen() {
   const isDark = useColorScheme() === 'dark';
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const userId = auth.currentUser?.uid;
+  // userId TIDAK dibaca langsung dari auth.currentUser?.uid di render pertama
+  // — itu yang bikin layar ini sempat nunjukin "Masuk dulu..." padahal user
+  // udah login (auth.currentUser masih null sesaat pas app baru dibuka,
+  // sebelum sesinya selesai di-restore). Tunggu onAuthStateChanged dulu.
+  const [userId, setUserId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      setUserId(user?.uid ?? null);
+      setAuthReady(true);
+    });
+    return unsubAuth;
+  }, []);
+
+  useEffect(() => {
+    if (!authReady) return; // tunggu status login dipastikan dulu
     if (!userId) {
+      setFavorites([]);
       setLoading(false);
       return;
     }
@@ -43,7 +59,7 @@ export default function FavoritesScreen() {
       setLoading(false);
     });
     return unsub;
-  }, [userId]);
+  }, [authReady, userId]);
 
   const handleRemove = async (bagId: string) => {
     if (!userId) return;
@@ -85,7 +101,7 @@ export default function FavoritesScreen() {
         <ThemedText style={styles.headerTitle}>Favorit</ThemedText>
       </View>
 
-      {!userId ? (
+      {!authReady ? null : !userId ? (
         <View style={styles.empty}>
           <ThemedText style={{ fontSize: 48 }}>🔒</ThemedText>
           <ThemedText style={styles.emptyText}>Masuk dulu untuk lihat favorit kamu</ThemedText>
