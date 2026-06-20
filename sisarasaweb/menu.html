@@ -7,12 +7,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="assets/css/style.css">
   <style>
-    #pickLocationMap { height: 220px; width: 100%; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 8px; }
-    .coord-display { display: flex; gap: 8px; }
-    .coord-display input { background: #f8fafc; font-size: 0.85rem; }
     .map-hint { font-size: 0.8rem; color: #94a3b8; margin-bottom: 6px; }
     .sync-badge { display: inline-block; background: #dcfce7; color: #15803d; border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; margin-left: 8px; }
   </style>
@@ -73,14 +69,13 @@
               <th>Harga Diskon</th>
               <th>Jam Pickup</th>
               <th>Stok</th>
-              <th>Lokasi</th>
               <th>Status</th>
               <th>Aksi</th>
             </tr>
           </thead>
           <tbody id="menuTableBody">
             <tr id="loadingRow">
-              <td colspan="8" class="text-center text-muted py-4">
+              <td colspan="7" class="text-center text-muted py-4">
                 <i class="fa-solid fa-spinner fa-spin me-2"></i> Memuat data menu...
               </td>
             </tr>
@@ -109,15 +104,26 @@
                 <input type="text" class="form-control" id="menuName" placeholder="Contoh: Paket Nasi Sisa Malam" required>
               </div>
               <div class="col-md-4">
-                <label class="form-label text-muted">Emoji</label>
+                <label class="form-label text-muted">Emoji (cadangan)</label>
                 <input type="text" class="form-control text-center" id="menuEmoji" placeholder="🍱" maxlength="2" style="font-size: 1.4rem;">
               </div>
             </div>
 
-            <div class="alert alert-light border d-flex align-items-center gap-2 mb-3" style="font-size:0.85rem">
-              <i class="fa-solid fa-circle-info text-success"></i>
-              Foto toko & lokasi peta diatur sekali di
-              <a href="settings.html" class="fw-bold">Pengaturan Toko</a>, otomatis berlaku untuk semua menu.
+            <div class="mb-3">
+              <label class="form-label text-muted fw-bold">
+                <i class="fa-solid fa-image text-success me-1"></i> URL Foto Menu
+              </label>
+              <p class="map-hint">
+                Klik kanan foto makanan di Google Images → <b>"Buka gambar di tab baru"</b> → copy URL dari address bar (harus diakhiri .jpg/.png/.webp).
+                Link yang diawali <code>google.com/imgres</code> akan otomatis diperbaiki.
+              </p>
+              <div class="d-flex gap-2 align-items-start">
+                <input type="url" class="form-control" id="menuImageUrl" placeholder="https://contoh.com/foto-makanan.jpg" oninput="previewMenuImage()">
+                <div id="menuImagePreviewWrap" style="width:70px;height:70px;border-radius:10px;border:1px solid #e2e8f0;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f8fafc;">
+                  <img id="menuImagePreview" src="" style="width:100%;height:100%;object-fit:cover;display:none;">
+                  <i class="fa-solid fa-image text-muted" id="menuImagePlaceholder"></i>
+                </div>
+              </div>
             </div>
 
             <div class="row g-3 mb-3">
@@ -166,6 +172,12 @@
               <textarea class="form-control" id="menuDeskripsi" rows="2" placeholder="Ceritakan isi Magic Bag ini..."></textarea>
             </div>
 
+            <div class="alert alert-light border d-flex align-items-center gap-2 mb-3" style="font-size:0.85rem">
+              <i class="fa-solid fa-map-location-dot text-success"></i>
+              Lokasi toko diatur sekali di
+              <a href="settings.html" class="fw-bold">Pengaturan Toko</a>, otomatis berlaku untuk semua menu.
+            </div>
+
             <div class="form-check form-switch mt-3">
               <input class="form-check-input" type="checkbox" id="menuIsActive" checked>
               <label class="form-check-label text-success fw-bold">Aktifkan Langsung</label>
@@ -202,7 +214,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="assets/js/main.js"></script>
   <script type="module" src="assets/js/auth-guard.js"></script>
 
@@ -214,7 +225,6 @@
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     let uid = localStorage.getItem('userUid');
-    let pickMap = null, pickMarker = null;
     let storeInfo = { name: 'Toko Saya', alamat: '', lat: -6.9175, lng: 107.6191 };
 
     // ── Load info toko dari Firestore (nama, alamat, lat, lng) ─────────────────
@@ -227,8 +237,8 @@
           storeInfo = {
             name: d.name || 'Toko Saya',
             alamat: d.address || '',
-            lat: d.lat || -6.9175,
-            lng: d.lng || 107.6191,
+            lat: d.latitude || -6.9175,
+            lng: d.longitude || 107.6191,
           };
           const el = document.getElementById('profileName');
           if (el) el.textContent = storeInfo.name;
@@ -236,55 +246,12 @@
       } catch(e) { console.warn('loadStoreInfo:', e); }
     }
 
-    // ── Inisialisasi peta pilih lokasi di modal ────────────────────────────────
-    function initPickMap(lat, lng) {
-      if (pickMap) {
-        pickMap.remove();
-        pickMap = null;
-        pickMarker = null;
-      }
-      setTimeout(() => {
-        pickMap = L.map('pickLocationMap').setView([lat, lng], 14);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap', maxZoom: 19
-        }).addTo(pickMap);
-
-        pickMarker = L.marker([lat, lng], { draggable: true }).addTo(pickMap);
-        document.getElementById('menuLat').value = lat.toFixed(6);
-        document.getElementById('menuLng').value = lng.toFixed(6);
-
-        pickMarker.on('dragend', () => {
-          const pos = pickMarker.getLatLng();
-          document.getElementById('menuLat').value = pos.lat.toFixed(6);
-          document.getElementById('menuLng').value = pos.lng.toFixed(6);
-        });
-
-        pickMap.on('click', (e) => {
-          pickMarker.setLatLng(e.latlng);
-          document.getElementById('menuLat').value = e.latlng.lat.toFixed(6);
-          document.getElementById('menuLng').value = e.latlng.lng.toFixed(6);
-        });
-      }, 300);
-    }
-
-    // ── Tombol "Dari Settings" ─────────────────────────────────────────────────
-    document.getElementById('pasteFromSettingsBtn').addEventListener('click', () => {
-      if (pickMap && pickMarker) {
-        pickMarker.setLatLng([storeInfo.lat, storeInfo.lng]);
-        pickMap.setView([storeInfo.lat, storeInfo.lng], 15);
-      }
-      document.getElementById('menuLat').value = storeInfo.lat.toFixed ? storeInfo.lat.toFixed(6) : storeInfo.lat;
-      document.getElementById('menuLng').value = storeInfo.lng.toFixed ? storeInfo.lng.toFixed(6) : storeInfo.lng;
-    });
 
     // ── Render baris tabel ─────────────────────────────────────────────────────
     function renderRow(id, data) {
       const statusBadge = data.isActive
         ? `<span class="badge badge-confirmed">Aktif</span>`
         : `<span class="badge badge-cancelled">Nonaktif</span>`;
-      const lokasiIcon = (data.lat && data.lng)
-        ? `<span class="text-success" title="${data.lat}, ${data.lng}"><i class="fa-solid fa-location-dot"></i> Ada</span>`
-        : `<span class="text-muted"><i class="fa-solid fa-location-dot"></i> -</span>`;
       const thumb = data.imageUrl
         ? `<img src="${data.imageUrl}" style="width:36px;height:36px;border-radius:8px;object-fit:cover;margin-right:8px" onerror="this.style.display='none'">`
         : `<span style="margin-right:8px">${data.emoji || '🛍️'}</span>`;
@@ -295,7 +262,6 @@
           <td class="text-success fw-bold">Rp ${Number(data.discountPrice).toLocaleString('id-ID')}</td>
           <td>${data.pickupStart} - ${data.pickupEnd}</td>
           <td class="fw-bold ${data.stock === 0 ? 'text-danger' : ''}">${data.stock}</td>
-          <td>${lokasiIcon}</td>
           <td>${statusBadge}</td>
           <td>
             <div class="d-flex gap-2">
@@ -314,7 +280,7 @@
         menuCache = {};
         if (snapshot.empty) {
           document.getElementById('menuTableBody').innerHTML =
-            `<tr><td colspan="8" class="text-center text-muted py-4">Belum ada menu. Klik "Tambah Menu" untuk memulai.</td></tr>`;
+            `<tr><td colspan="7" class="text-center text-muted py-4">Belum ada menu. Klik "Tambah Menu" untuk memulai.</td></tr>`;
           return;
         }
         let html = '';
@@ -372,7 +338,6 @@
       document.getElementById('menuImageUrl').value = '';
       previewMenuImage();
       new bootstrap.Modal(document.getElementById('mbModal')).show();
-      initPickMap(storeInfo.lat, storeInfo.lng);
     });
 
     // ── Edit: prefill form ─────────────────────────────────────────────────────
@@ -395,9 +360,6 @@
       document.getElementById('menuImageUrl').value = data.imageUrl || '';
       previewMenuImage();
       new bootstrap.Modal(document.getElementById('mbModal')).show();
-      const lat = data.lat || storeInfo.lat;
-      const lng = data.lng || storeInfo.lng;
-      initPickMap(lat, lng);
     };
 
     // ── Simpan (Tambah/Edit) + SYNC ke magic_bags ─────────────────────────────
@@ -406,8 +368,8 @@
       const docId = document.getElementById('menuDocId').value;
       const existingMagicBagId = document.getElementById('menuMagicBagId').value;
 
-      const lat = parseFloat(document.getElementById('menuLat').value) || storeInfo.lat;
-      const lng = parseFloat(document.getElementById('menuLng').value) || storeInfo.lng;
+      const lat = storeInfo.lat;
+      const lng = storeInfo.lng;
       const pickupStart = document.getElementById('menuPickupStart').value;
       const pickupEnd = document.getElementById('menuPickupEnd').value;
       const imageUrl = document.getElementById('menuImageUrl').value.trim();
@@ -514,8 +476,10 @@
       await loadStoreInfo();
       listenMenus();
     }
+    // Tunggu sisarasa:authReady — jangan start dari localStorage langsung
+    // (race condition: request.auth bisa masih null saat query Firestore
+    // jalan duluan sebelum Firebase Auth SDK selesai resolve sesi login).
     document.addEventListener('sisarasa:authReady', (e) => { if (e.detail.uid) startPage(e.detail.uid); });
-    if (uid) startPage(uid);
   </script>
 </body>
 </html>

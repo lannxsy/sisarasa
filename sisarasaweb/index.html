@@ -278,11 +278,11 @@
     // Kalau auth-guard sudah lebih dulu selesai sebelum listener ini terpasang
     // (jarang, tapi mungkin di koneksi cepat), kita juga cek localStorage
     // sebagai fallback langsung.
+    // Tunggu sisarasa:authReady — jangan start dari localStorage langsung
+    // (lihat catatan di orders.html soal race condition permission-denied).
     document.addEventListener('sisarasa:authReady', (e) => {
       if (e.detail.uid) startDashboard(e.detail.uid);
     });
-    const existingUid = localStorage.getItem('userUid');
-    if (existingUid) startDashboard(existingUid);
   </script>
 </body>
 </html>

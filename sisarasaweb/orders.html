@@ -400,10 +400,15 @@
       await loadMyBagIds();
       listenOrders();
     }
+    // PENTING: jangan start pakai localStorage langsung di sini — itu race
+    // condition, karena localStorage bisa kebawa dari sesi lama padahal
+    // Firebase Auth SDK belum selesai resolve (request.auth masih null pas
+    // Firestore di-query → permission-denied → listener mati & 'started'
+    // sudah terlanjur true sehingga sisarasa:authReady susulan diabaikan).
+    // Tunggu auth-guard.js yang jadi satu-satunya sumber kebenaran login.
     document.addEventListener('sisarasa:authReady', (e) => {
       if (e.detail.uid) startOrdersPage(e.detail.uid);
     });
-    if (uid) startOrdersPage(uid);
   </script>
 </body>
 </html>

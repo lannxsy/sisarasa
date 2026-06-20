@@ -272,16 +272,21 @@
 
         await setDoc(storeRef(), storeData, { merge: true });
 
-        // Sinkronkan ke SEMUA magic_bags milik toko ini, supaya foto, lokasi,
+        // Sinkronkan ke SEMUA magic_bags milik toko ini, supaya lokasi,
         // alamat, dan nama toko selalu konsisten di semua menu sekaligus.
+        // Foto (imageUrl) TIDAK disertakan: foto toko dan foto tiap menu
+        // adalah dua hal berbeda dan diatur dari tempat masing-masing
+        // (Pengaturan Toko vs Kelola Menu).
         const q = query(collection(db, 'magic_bags'), where('storeId', '==', storeId));
         const snap = await getDocs(q);
         if (!snap.empty) {
           const batch = writeBatch(db);
           snap.forEach((docSnap) => {
             batch.update(docSnap.ref, {
+              // Hanya field identitas TOKO yang disinkron ke tiap menu.
+              // imageUrl SENGAJA tidak disentuh di sini — itu foto MENU,
+              // diatur sendiri lewat menu.html, bukan dari Pengaturan Toko.
               tokoNama: storeData.name,
-              imageUrl: storeData.imageUrl,
               alamat: storeData.address,
               lat: storeData.latitude,
               lng: storeData.longitude,
@@ -294,7 +299,7 @@
         // langsung menampilkan nama toko terbaru tanpa perlu logout-login.
         localStorage.setItem('storeName', storeNameInput.value);
 
-        alert("Berhasil menyimpan profil toko! Semua menu ikut diperbarui.");
+        alert("Berhasil menyimpan profil toko! Nama, alamat & lokasi di semua menu ikut diperbarui.");
       } catch (error) {
         console.error("Error writing document: ", error);
         alert("Gagal menyimpan data: " + error.message);
@@ -312,10 +317,11 @@
       storeId = currentUid;
       loadStoreData();
     }
+    // Sama seperti orders.html — JANGAN start pakai localStorage langsung,
+    // tunggu sisarasa:authReady (request.auth dijamin sudah resolve di situ).
     document.addEventListener('sisarasa:authReady', (e) => {
       if (e.detail.uid) startSettingsPage(e.detail.uid);
     });
-    if (storeId) startSettingsPage(storeId);
   </script>
 </body>
 </html>

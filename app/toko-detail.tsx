@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Pressable, StyleSheet, View, useColorScheme, Image,
@@ -27,6 +27,15 @@ interface MagicBag {
   lat?: number;
   lng?: number;
   storeId?: string;
+}
+
+interface StoreDoc {
+  name?: string;
+  imageUrl?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  isActive?: boolean;
 }
 
 function buatMiniMap(lat: number, lng: number, namaToKo: string, emoji: string) {
@@ -63,7 +72,20 @@ export default function TokoDetailScreen() {
   const router = useRouter();
   const isDark = useColorScheme() === 'dark';
   const [bags, setBags] = useState<MagicBag[]>([]);
+  const [storeDoc, setStoreDoc] = useState<StoreDoc | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!storeId) return;
+    // Data resmi toko (nama, foto, alamat, lokasi) — sumber kebenaran dari
+    // halaman Pengaturan Toko di web admin. Kalau dokumennya nggak ada
+    // (kasus lama: storeId param sebenarnya tokoNama), storeDoc tetap null
+    // dan kita fallback ke data menu pertama di bawah.
+    const unsubStore = onSnapshot(doc(db, 'stores', storeId), (snap) => {
+      setStoreDoc(snap.exists() ? (snap.data() as StoreDoc) : null);
+    });
+    return unsubStore;
+  }, [storeId]);
 
   useEffect(() => {
     if (!storeId) return;
@@ -100,7 +122,18 @@ export default function TokoDetailScreen() {
     );
   }
 
-  const toko = bags[0];
+  // Data toko buat header: utamakan dokumen stores/{storeId} (resmi, dari
+  // Pengaturan Toko). Fallback ke menu pertama HANYA untuk data lama yang
+  // belum punya dokumen stores/{storeId} (storeId param = tokoNama lama).
+  const toko = {
+    tokoNama: storeDoc?.name || bags[0].tokoNama,
+    imageUrl: storeDoc?.imageUrl || bags[0].imageUrl,
+    alamat: storeDoc?.address || bags[0].alamat,
+    lat: storeDoc?.latitude ?? bags[0].lat,
+    lng: storeDoc?.longitude ?? bags[0].lng,
+    jamPickup: bags[0].jamPickup,
+    emoji: bags[0].emoji,
+  };
 
   const renderMenuItem = ({ item }: { item: MagicBag }) => {
     const habis = item.stok <= 0;
