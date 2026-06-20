@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Pressable, useColorScheme, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc, addDoc, collection, updateDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, collection, runTransaction } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { ThemedText } from '@/components/themed-text';
@@ -111,34 +111,56 @@ export default function DetailScreen() {
 
   const handleOrder = async () => {
     if (!bag || !auth.currentUser) return;
+    if (ordering) return; // cegah double-tap memicu dua transaksi sekaligus
     setOrdering(true);
     await new Promise((r) => setTimeout(r, 2000));
+
+    const kode = generateKode();
+    const bagRef = doc(db, 'magic_bags', bag.id);
+    const orderRef = doc(collection(db, 'orders')); // generate id duluan, dipakai di dalam transaksi
+
     try {
-      const kode = generateKode();
-      await addDoc(collection(db, 'orders'), {
-        userId: auth.currentUser.uid,
-        userEmail: auth.currentUser.email,
-        bagId: bag.id,
-        tokoNama: bag.tokoNama,
-        namaMenu: bag.namaMenu || bag.tokoNama,
-        emoji: bag.emoji,
-        imageUrl: bag.imageUrl || '',
-        harga: bag.harga * jumlah,
-        jumlah,
-        status: 'pending',
-        kodePickup: kode,
-        createdAt: Date.now(),
+      // addDoc (simpan order) dan updateDoc (kurangi stok) digabung jadi satu
+      // operasi atomik. Kalau salah satu gagal (mis. stok udah habis duluan
+      // direbut pembeli lain), KEDUANYA dibatalkan otomatis oleh Firestore —
+      // jadi nggak akan ada lagi kasus "gagal" tapi order-nya kepalang tersimpan.
+      await runTransaction(db, async (tx) => {
+        const bagSnap = await tx.get(bagRef);
+        if (!bagSnap.exists()) {
+          throw new Error('Magic Bag tidak ditemukan.');
+        }
+        const stokSekarang = bagSnap.data().stok ?? 0;
+        if (stokSekarang < jumlah) {
+          throw new Error('Stok tidak mencukupi, sudah diambil pembeli lain.');
+        }
+
+        tx.set(orderRef, {
+          userId: auth.currentUser!.uid,
+          userEmail: auth.currentUser!.email,
+          bagId: bag.id,
+          tokoNama: bag.tokoNama,
+          namaMenu: bag.namaMenu || bag.tokoNama,
+          emoji: bag.emoji,
+          imageUrl: bag.imageUrl || '',
+          harga: bag.harga * jumlah,
+          jumlah,
+          status: 'pending',
+          kodePickup: kode,
+          createdAt: Date.now(),
+        });
+        tx.update(bagRef, { stok: stokSekarang - jumlah });
       });
-      await updateDoc(doc(db, 'magic_bags', bag.id), { stok: increment(-jumlah) });
+
       setOrdering(false);
       Alert.alert(
         '✅ Pembayaran Berhasil!',
         `Kode pickup kamu: ${kode}\n\nLihat di tab Pesanan untuk QR Code.`,
         [{ text: 'Lihat Pesanan', onPress: () => router.replace('/(tabs)/toko') }]
       );
-    } catch {
+    } catch (err) {
       setOrdering(false);
-      Alert.alert('Error', 'Gagal membuat pesanan.');
+      const pesan = err instanceof Error ? err.message : 'Gagal membuat pesanan.';
+      Alert.alert('Error', pesan);
     }
   };
 

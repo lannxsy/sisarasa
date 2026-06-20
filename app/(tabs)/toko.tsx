@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View, useColorScheme, Image,
@@ -41,6 +41,7 @@ interface TokoGroup {
   jamPickup: string;
   lat?: number;
   lng?: number;
+  storeExists?: boolean;
 }
 
 export default function TokoScreen() {
@@ -49,6 +50,11 @@ export default function TokoScreen() {
   const [bags, setBags] = useState<MagicBag[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  // Cache dokumen stores/{storeId} → { imageUrl, address }. Dipakai untuk
+  // menimpa foto & alamat hasil grouping dari magic_bags, supaya kartu
+  // toko di list ini tampil foto TOKO (dari Pengaturan Toko), bukan foto
+  // menu pertama milik toko itu.
+  const [storeDocs, setStoreDocs] = useState<Record<string, { imageUrl?: string; address?: string } | null>>({});
 
   useEffect(() => {
     const q = query(collection(db, 'magic_bags'), orderBy('createdAt', 'desc'));
@@ -58,6 +64,27 @@ export default function TokoScreen() {
     });
     return unsub;
   }, []);
+
+  // Ambil dokumen stores/{storeId} untuk tiap storeId baru yang belum ada
+  // di cache. storeId di sini bisa berupa uid toko asli, atau (data lama)
+  // tokoNama — kalau dokumennya tidak ditemukan, ditandai null supaya
+  // grouping di bawah tahu harus fallback ke data menu.
+  useEffect(() => {
+    const ids = Array.from(new Set(bags.map((b) => b.storeId).filter((id): id is string => !!id)));
+    const missing = ids.filter((id) => !(id in storeDocs));
+    if (missing.length === 0) return;
+    missing.forEach(async (id) => {
+      try {
+        const snap = await getDoc(doc(db, 'stores', id));
+        setStoreDocs((prev) => ({
+          ...prev,
+          [id]: snap.exists() ? (snap.data() as { imageUrl?: string; address?: string }) : null,
+        }));
+      } catch {
+        setStoreDocs((prev) => ({ ...prev, [id]: null }));
+      }
+    });
+  }, [bags, storeDocs]);
 
   // Group magic_bags berdasarkan storeId (fallback: tokoNama kalau storeId kosong)
   const tokoGroups: TokoGroup[] = React.useMemo(() => {
@@ -71,14 +98,19 @@ export default function TokoScreen() {
         existing.totalStok += bag.stok;
         if (bag.harga < existing.hargaTermurah) existing.hargaTermurah = bag.harga;
         if (!existing.kategoriList.includes(bag.kategori)) existing.kategoriList.push(bag.kategori);
-        if (!existing.imageUrl && bag.imageUrl) existing.imageUrl = bag.imageUrl;
+        // imageUrl/alamat dari menu HANYA dipakai sebagai fallback data lama
+        // (storeExists === false). Kalau dokumen stores sudah ada, foto &
+        // alamat toko murni dari sana — tidak boleh ketiban foto menu.
+        if (!existing.storeExists && !existing.imageUrl && bag.imageUrl) existing.imageUrl = bag.imageUrl;
       } else {
+        const storeDoc = bag.storeId ? storeDocs[bag.storeId] : undefined;
+        const storeExists = !!storeDoc;
         map.set(key, {
           storeId: key,
           tokoNama: bag.tokoNama,
-          imageUrl: bag.imageUrl,
+          imageUrl: storeExists ? storeDoc!.imageUrl : bag.imageUrl,
           emoji: bag.emoji || '🏪',
-          alamat: bag.alamat,
+          alamat: storeExists ? (storeDoc!.address ?? bag.alamat) : bag.alamat,
           kategoriList: [bag.kategori],
           totalMenu: 1,
           totalStok: bag.stok,
@@ -86,11 +118,12 @@ export default function TokoScreen() {
           jamPickup: bag.jamPickup,
           lat: bag.lat,
           lng: bag.lng,
+          storeExists,
         });
       }
     }
     return Array.from(map.values());
-  }, [bags]);
+  }, [bags, storeDocs]);
 
   const filtered = tokoGroups.filter(
     (t) =>

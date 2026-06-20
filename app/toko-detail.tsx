@@ -124,13 +124,18 @@ export default function TokoDetailScreen() {
 
   // Data toko buat header: utamakan dokumen stores/{storeId} (resmi, dari
   // Pengaturan Toko). Fallback ke menu pertama HANYA untuk data lama yang
-  // belum punya dokumen stores/{storeId} (storeId param = tokoNama lama).
+  // belum punya dokumen stores/{storeId} sama sekali (storeDoc === null,
+  // kasus storeId param = tokoNama lama). Kalau dokumen stores SUDAH ada
+  // tapi field imageUrl/address/lat/lng-nya memang belum diisi admin,
+  // jangan jatuh ke foto/alamat menu — tampilkan kosong/placeholder saja,
+  // supaya foto toko tidak ketuker dengan foto menu.
+  const storeExists = storeDoc !== null;
   const toko = {
-    tokoNama: storeDoc?.name || bags[0].tokoNama,
-    imageUrl: storeDoc?.imageUrl || bags[0].imageUrl,
-    alamat: storeDoc?.address || bags[0].alamat,
-    lat: storeDoc?.latitude ?? bags[0].lat,
-    lng: storeDoc?.longitude ?? bags[0].lng,
+    tokoNama: storeExists ? (storeDoc!.name || bags[0].tokoNama) : bags[0].tokoNama,
+    imageUrl: storeExists ? storeDoc!.imageUrl : bags[0].imageUrl,
+    alamat: storeExists ? storeDoc!.address : bags[0].alamat,
+    lat: storeExists ? storeDoc!.latitude : bags[0].lat,
+    lng: storeExists ? storeDoc!.longitude : bags[0].lng,
     jamPickup: bags[0].jamPickup,
     emoji: bags[0].emoji,
   };

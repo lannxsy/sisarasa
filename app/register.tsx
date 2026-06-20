@@ -9,13 +9,22 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ActivityIndicator // Tambahkan ActivityIndicator
+  ActivityIndicator,
+  View,
 } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { FontAwesome5 } from '@expo/vector-icons';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { auth } from './lib/firebase';
+
+// Register pakai warna hijau (beda dari Login yang merah/coral Sisarasa)
+const COLORS = {
+  accent: '#10b981',
+  accentPressed: '#059669',
+  textMuted: '#636e72',
+};
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -24,7 +33,7 @@ export default function RegisterScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false); // State Loading untuk UX
+  const [isLoading, setIsLoading] = useState(false);
 
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
 
@@ -46,14 +55,13 @@ export default function RegisterScreen() {
       return;
     }
 
-    setIsLoading(true); // Mulai loading
+    setIsLoading(true);
     try {
       await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       router.replace('/(tabs)');
     } catch (e: any) {
       const code = typeof e?.code === 'string' ? e.code : '';
 
-      // Error handling lengkap sesuai kriteria
       if (code === 'auth/email-already-in-use') {
         Alert.alert('Register Gagal', 'Email sudah terdaftar. Silakan gunakan email lain atau login.');
       } else if (code === 'auth/invalid-email') {
@@ -64,13 +72,20 @@ export default function RegisterScreen() {
         Alert.alert('Register Gagal', e?.message ?? 'Terjadi kesalahan saat membuat akun.');
       }
     } finally {
-      setIsLoading(false); // Matikan loading
+      setIsLoading(false);
     }
   };
 
   const cardStyle = {
     backgroundColor: isDark ? '#1e293b' : '#ffffff',
     shadowColor: isDark ? '#000' : '#64748b',
+  };
+
+  const inputStyle = {
+    backgroundColor: isDark ? '#0f172a' : '#f8f9fa',
+    color: isDark ? '#f8fafc' : '#2d3436',
+    borderColor: isDark ? '#334155' : '#e2e8f0',
+    opacity: isLoading ? 0.7 : 1,
   };
 
   return (
@@ -84,91 +99,87 @@ export default function RegisterScreen() {
         showsVerticalScrollIndicator={false}
       >
         <ThemedView style={styles.container}>
-
-          <ThemedView style={styles.header}>
-            <ThemedText type="title" style={styles.title}>Buat Akun</ThemedText>
-            <ThemedText style={styles.subtitle}>Daftar untuk mulai menggunakan fitur lengkap</ThemedText>
-          </ThemedView>
-
           <ThemedView style={[styles.card, cardStyle]}>
-            <ThemedView style={styles.form}>
 
-              <ThemedView style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Email</ThemedText>
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="email-address"
-                  placeholder="nama@email.com"
-                  editable={!isLoading} // Kunci input saat loading
-                  placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
-                  style={[
-                    styles.input,
+            {/* Brand panel - meniru .auth-image di versi web */}
+            <View style={[styles.brandPanel, { backgroundColor: COLORS.accent }]}>
+              <View style={styles.brandRow}>
+                <FontAwesome5 name="leaf" size={20} color="#ffffff" />
+                <ThemedText style={styles.brandName}>Sisarasa</ThemedText>
+              </View>
+              <ThemedText style={styles.brandTagline}>
+                Bergabung sekarang dan nikmati promo spesial untuk pengguna baru.
+              </ThemedText>
+            </View>
+
+            {/* Form panel - meniru .auth-form-container di versi web */}
+            <ThemedView style={styles.formPanel}>
+              <ThemedText type="title" style={styles.title}>Buat Akun</ThemedText>
+              <ThemedText style={styles.subtitle}>Daftar untuk mulai menggunakan fitur lengkap.</ThemedText>
+
+              <ThemedView style={styles.form}>
+
+                <ThemedView style={styles.inputContainer}>
+                  <ThemedText style={styles.label}>Alamat Email</ThemedText>
+                  <TextInput
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="email-address"
+                    placeholder="nama@email.com"
+                    editable={!isLoading}
+                    placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+                    style={[styles.input, inputStyle]}
+                  />
+                </ThemedView>
+
+                <ThemedView style={styles.inputContainer}>
+                  <ThemedText style={styles.label}>Password</ThemedText>
+                  <TextInput
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    placeholder="Minimal 6 karakter"
+                    editable={!isLoading}
+                    placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+                    style={[styles.input, inputStyle]}
+                  />
+                </ThemedView>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.primaryButton,
                     {
-                      backgroundColor: isDark ? '#0f172a' : '#f8fafc',
-                      color: isDark ? '#f8fafc' : '#0f172a',
-                      borderColor: isDark ? '#334155' : '#e2e8f0',
-                      opacity: isLoading ? 0.7 : 1
-                    }
+                      opacity: pressed || isLoading ? 0.85 : 1,
+                      backgroundColor: isLoading ? '#94a3b8' : COLORS.accent,
+                    },
                   ]}
-                />
-              </ThemedView>
+                  onPress={onCreateAccount}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
+                      Daftar Sekarang
+                    </ThemedText>
+                  )}
+                </Pressable>
 
-              <ThemedView style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Password</ThemedText>
-                <TextInput
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  placeholder="Minimal 6 karakter"
-                  editable={!isLoading} // Kunci input saat loading
-                  placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: isDark ? '#0f172a' : '#f8fafc',
-                      color: isDark ? '#f8fafc' : '#0f172a',
-                      borderColor: isDark ? '#334155' : '#e2e8f0',
-                      opacity: isLoading ? 0.7 : 1
-                    }
-                  ]}
-                />
-              </ThemedView>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  {
-                    opacity: (pressed || isLoading) ? 0.8 : 1,
-                    backgroundColor: isLoading ? '#64748b' : '#10b981'
-                  }
-                ]}
-                onPress={onCreateAccount}
-                disabled={isLoading} // Cegah double tap
-              >
-                {isLoading ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <ThemedText type="defaultSemiBold" style={styles.primaryButtonText}>
-                    Daftar Sekarang
+                <ThemedView style={styles.footer}>
+                  <ThemedText style={styles.footerText}>
+                    Sudah punya akun?{' '}
+                    <Link href="/login" asChild disabled={isLoading}>
+                      <ThemedText type="link" style={styles.linkText}>Masuk di sini</ThemedText>
+                    </Link>
                   </ThemedText>
-                )}
-              </Pressable>
+                </ThemedView>
 
-              <ThemedView style={styles.footer}>
-                <ThemedText style={styles.footerText}>
-                  Sudah punya akun?{' '}
-                  <Link href="/login" asChild disabled={isLoading}>
-                    <ThemedText type="link" style={styles.linkText}>Masuk di sini</ThemedText>
-                  </Link>
-                </ThemedText>
               </ThemedView>
-
             </ThemedView>
-          </ThemedView>
 
+          </ThemedView>
         </ThemedView>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -185,35 +196,52 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
-    marginBottom: 32,
-    alignItems: 'center',
-    width: '100%',
-    backgroundColor: 'transparent',
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    opacity: 0.6,
-    textAlign: 'center',
-    marginTop: 4,
-  },
   card: {
-    borderRadius: 28,
-    padding: 24,
+    borderRadius: 20,
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 420,
+    overflow: 'hidden',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.1,
     shadowRadius: 20,
     elevation: 8,
   },
+  brandPanel: {
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  brandName: {
+    color: '#ffffff',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  brandTagline: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  formPanel: {
+    padding: 24,
+    backgroundColor: 'transparent',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  subtitle: {
+    fontSize: 14,
+    opacity: 0.6,
+    marginTop: 2,
+    marginBottom: 20,
+  },
   form: {
-    gap: 18,
+    gap: 16,
     backgroundColor: 'transparent',
   },
   inputContainer: {
@@ -221,43 +249,42 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    marginLeft: 4,
   },
   input: {
-    height: 56,
+    height: 52,
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    fontSize: 16,
+    fontSize: 15,
   },
   primaryButton: {
-    marginTop: 10,
-    borderRadius: 16,
-    height: 56,
+    marginTop: 4,
+    borderRadius: 12,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
   },
   primaryButtonText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
   footer: {
-    marginTop: 12,
+    marginTop: 8,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
   },
   footerText: {
-    fontSize: 14,
+    fontSize: 13,
     opacity: 0.7,
     textAlign: 'center',
   },
   linkText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
-    color: '#3b82f6',
-  }
+    color: COLORS.accent,
+  },
 });
