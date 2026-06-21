@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, FlatList, StyleSheet, useColorScheme,
   Pressable, Modal, ActivityIndicator, Linking, Image, Alert,
+  ScrollView, Dimensions,
 } from 'react-native';
 import { collection, onSnapshot, query, orderBy, where, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -243,112 +244,122 @@ export default function OrdersScreen() {
         onRequestClose={() => setQrModal(null)}
       >
         <View style={styles.overlay}>
-          <View style={[styles.modal, { backgroundColor: isDark ? '#1e293b' : COLORS.white }]}>
+          <View style={[
+            styles.modal,
+            { backgroundColor: isDark ? '#1e293b' : COLORS.white },
+          ]}>
             {/* Handle bar */}
             <View style={styles.handleBar} />
 
-            <ThemedText style={styles.modalTitle}>Kode Pickup</ThemedText>
-            <ThemedText style={styles.modalToko}>{qrModal?.tokoNama}</ThemedText>
-            {qrModal?.namaMenu ? (
-              <ThemedText style={styles.modalMenuName}>{qrModal.namaMenu}</ThemedText>
-            ) : null}
-
-            {/* QR asli — link ke halaman pickup, di-scan pakai kamera HP
-                BIASA (bukan dari app), langsung tandai pesanan selesai */}
-            <View style={styles.qrWrap}>
-              {qrModal?.kodePickup ? (
-                <QRCode
-                  value={`https://sisarasa-3f969.web.app/pickup.html?oid=${qrModal.id}&kode=${qrModal.kodePickup}`}
-                  size={170}
-                  color={isDark ? '#fff' : '#0f172a'}
-                  backgroundColor="transparent"
-                />
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              <ThemedText style={styles.modalTitle}>Kode Pickup</ThemedText>
+              <ThemedText style={styles.modalToko}>{qrModal?.tokoNama}</ThemedText>
+              {qrModal?.namaMenu ? (
+                <ThemedText style={styles.modalMenuName}>{qrModal.namaMenu}</ThemedText>
               ) : null}
-            </View>
 
-            {/* Kode */}
-            <View style={styles.kodeWrap}>
-              <ThemedText style={styles.kodeLabel}>Kode</ThemedText>
-              <ThemedText style={styles.kodeText}>{qrModal?.kodePickup}</ThemedText>
-            </View>
-
-            {/* Status pembayaran — pembeli bayar CASH di toko pas ambil
-                pesanan, jadi badge "Pembayaran Berhasil" baru muncul
-                SETELAH status jadi completed (abis di-scan mitra), bukan
-                dari awal checkout. */}
-            <View style={styles.successRow}>
-              {(qrModal?.status === 'completed' || qrModal?.status === 'selesai') ? (
-                <>
-                  <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
-                  <ThemedText style={styles.successText}>Pembayaran Berhasil</ThemedText>
-                </>
-              ) : (qrModal?.status === 'cancelled' || qrModal?.status === 'batal') ? (
-                <>
-                  <Ionicons name="close-circle" size={20} color={COLORS.danger} />
-                  <ThemedText style={[styles.successText, { color: COLORS.danger }]}>Pesanan Dibatalkan</ThemedText>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="time-outline" size={20} color="#f59e0b" />
-                  <ThemedText style={[styles.successText, { color: '#f59e0b' }]}>Menunggu Diambil</ThemedText>
-                </>
-              )}
-            </View>
-
-            <ThemedText style={styles.modalHint}>
-              {(qrModal?.status === 'completed' || qrModal?.status === 'selesai')
-                ? 'Pesanan ini sudah diambil dan dibayar di toko.'
-                : 'Tunjukkan kode ini ke toko & bayar di tempat saat mengambil pesanan'}
-            </ThemedText>
-
-            {/* Info pesanan */}
-            <View style={[styles.infoBox, { backgroundColor: isDark ? COLORS.gray800 : COLORS.gray100 }]}>
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.infoLabel}>Total Bayar</ThemedText>
-                <ThemedText style={styles.infoValue}>
-                  Rp {qrModal?.harga.toLocaleString('id-ID')}
-                </ThemedText>
+              {/* QR asli — link ke halaman pickup, di-scan pakai kamera HP
+                  BIASA (bukan dari app), langsung tandai pesanan selesai */}
+              <View style={styles.qrWrap}>
+                {qrModal?.kodePickup ? (
+                  <QRCode
+                    value={`https://sisarasa-3f969.web.app/pickup.html?oid=${qrModal.id}&kode=${qrModal.kodePickup}`}
+                    size={140}
+                    color={isDark ? '#fff' : '#0f172a'}
+                    backgroundColor="transparent"
+                  />
+                ) : null}
               </View>
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.infoLabel}>Status</ThemedText>
-                <ThemedText style={[styles.infoValue, {
-                  color: STATUS_LABEL[qrModal?.status ?? 'pending']?.color
-                }]}>
-                  {STATUS_LABEL[qrModal?.status ?? 'pending']?.label}
-                </ThemedText>
-              </View>
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.infoLabel}>Tanggal</ThemedText>
-                <ThemedText style={styles.infoValue}>
-                  {qrModal ? (toDate(qrModal.createdAt)?.toLocaleDateString('id-ID') ?? '-') : ''}
-                </ThemedText>
-              </View>
-            </View>
 
-            {/* Lokasi pickup */}
-            <View style={[styles.infoBox, { backgroundColor: isDark ? COLORS.gray800 : COLORS.gray100, width: '100%' }]}>
-              <View style={styles.locationHeader}>
-                <Ionicons name="location-outline" size={16} color={COLORS.primary} />
-                <ThemedText style={styles.locationTitle}>Lokasi Pickup</ThemedText>
+              {/* Kode */}
+              <View style={styles.kodeWrap}>
+                <ThemedText style={styles.kodeLabel}>Kode</ThemedText>
+                <ThemedText style={styles.kodeText}>{qrModal?.kodePickup}</ThemedText>
               </View>
-              {locationLoading ? (
-                <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 8 }} />
-              ) : storeLocation?.alamat || storeLocation?.lat ? (
-                <>
-                  {storeLocation.alamat && (
-                    <ThemedText style={styles.locationAddress}>{storeLocation.alamat}</ThemedText>
-                  )}
-                  {storeLocation.lat && storeLocation.lng && (
-                    <Pressable style={styles.mapsBtn} onPress={openMaps}>
-                      <Ionicons name="navigate-outline" size={15} color={COLORS.primary} />
-                      <ThemedText style={styles.mapsBtnText}>Buka di Google Maps</ThemedText>
-                    </Pressable>
-                  )}
-                </>
-              ) : (
-                <ThemedText style={styles.locationAddress}>Lokasi toko belum tersedia.</ThemedText>
-              )}
-            </View>
+
+              {/* Status pembayaran — pembeli bayar CASH di toko pas ambil
+                  pesanan, jadi badge "Pembayaran Berhasil" baru muncul
+                  SETELAH status jadi completed (abis di-scan mitra), bukan
+                  dari awal checkout. */}
+              <View style={styles.successRow}>
+                {(qrModal?.status === 'completed' || qrModal?.status === 'selesai') ? (
+                  <>
+                    <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
+                    <ThemedText style={styles.successText}>Pembayaran Berhasil</ThemedText>
+                  </>
+                ) : (qrModal?.status === 'cancelled' || qrModal?.status === 'batal') ? (
+                  <>
+                    <Ionicons name="close-circle" size={20} color={COLORS.danger} />
+                    <ThemedText style={[styles.successText, { color: COLORS.danger }]}>Pesanan Dibatalkan</ThemedText>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="time-outline" size={20} color="#f59e0b" />
+                    <ThemedText style={[styles.successText, { color: '#f59e0b' }]}>Menunggu Diambil</ThemedText>
+                  </>
+                )}
+              </View>
+
+              <ThemedText style={styles.modalHint}>
+                {(qrModal?.status === 'completed' || qrModal?.status === 'selesai')
+                  ? 'Pesanan ini sudah diambil dan dibayar di toko.'
+                  : 'Tunjukkan kode ini ke toko & bayar di tempat saat mengambil pesanan'}
+              </ThemedText>
+
+              {/* Info pesanan */}
+              <View style={[styles.infoBox, { backgroundColor: isDark ? COLORS.gray800 : COLORS.gray100 }]}>
+                <View style={styles.infoRow}>
+                  <ThemedText style={styles.infoLabel}>Total Bayar</ThemedText>
+                  <ThemedText style={styles.infoValue}>
+                    Rp {qrModal?.harga.toLocaleString('id-ID')}
+                  </ThemedText>
+                </View>
+                <View style={styles.infoRow}>
+                  <ThemedText style={styles.infoLabel}>Status</ThemedText>
+                  <ThemedText style={[styles.infoValue, {
+                    color: STATUS_LABEL[qrModal?.status ?? 'pending']?.color
+                  }]}>
+                    {STATUS_LABEL[qrModal?.status ?? 'pending']?.label}
+                  </ThemedText>
+                </View>
+                <View style={styles.infoRow}>
+                  <ThemedText style={styles.infoLabel}>Tanggal</ThemedText>
+                  <ThemedText style={styles.infoValue}>
+                    {qrModal ? (toDate(qrModal.createdAt)?.toLocaleDateString('id-ID') ?? '-') : ''}
+                  </ThemedText>
+                </View>
+              </View>
+
+              {/* Lokasi pickup */}
+              <View style={[styles.infoBox, { backgroundColor: isDark ? COLORS.gray800 : COLORS.gray100, width: '100%' }]}>
+                <View style={styles.locationHeader}>
+                  <Ionicons name="location-outline" size={16} color={COLORS.primary} />
+                  <ThemedText style={styles.locationTitle}>Lokasi Pickup</ThemedText>
+                </View>
+                {locationLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 8 }} />
+                ) : storeLocation?.alamat || storeLocation?.lat ? (
+                  <>
+                    {storeLocation.alamat && (
+                      <ThemedText style={styles.locationAddress}>{storeLocation.alamat}</ThemedText>
+                    )}
+                    {storeLocation.lat && storeLocation.lng && (
+                      <Pressable style={styles.mapsBtn} onPress={openMaps}>
+                        <Ionicons name="navigate-outline" size={15} color={COLORS.primary} />
+                        <ThemedText style={styles.mapsBtnText}>Buka di Google Maps</ThemedText>
+                      </Pressable>
+                    )}
+                  </>
+                ) : (
+                  <ThemedText style={styles.locationAddress}>Lokasi toko belum tersedia.</ThemedText>
+                )}
+              </View>
+            </ScrollView>
 
             <Pressable style={styles.closeBtn} onPress={() => setQrModal(null)}>
               <ThemedText style={styles.closeBtnText}>Tutup</ThemedText>
@@ -395,21 +406,25 @@ const styles = StyleSheet.create({
   },
   modal: {
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 24, paddingBottom: 40, alignItems: 'center',
+    paddingTop: 14, paddingHorizontal: 24, paddingBottom: 24,
+    alignItems: 'center',
     width: '100%',
+    maxHeight: Dimensions.get('window').height * 0.88,
   },
   handleBar: {
     width: 40, height: 4, borderRadius: 2,
-    backgroundColor: COLORS.gray200, marginBottom: 20,
+    backgroundColor: COLORS.gray200, marginBottom: 12,
   },
+  modalScroll: { width: '100%' },
+  modalScrollContent: { alignItems: 'center', paddingBottom: 8 },
   modalTitle: { fontSize: 20, fontWeight: '800', marginBottom: 4 },
   modalToko: { fontSize: 13, color: COLORS.gray400, marginBottom: 2 },
-  modalMenuName: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginBottom: 18 },
+  modalMenuName: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginBottom: 16 },
 
   // QR
   qrWrap: {
     borderWidth: 2, borderColor: COLORS.gray200,
-    borderRadius: 16, padding: 14, marginBottom: 16,
+    borderRadius: 16, padding: 12, marginBottom: 14,
   },
   qrGrid: {
     width: 150, height: 150,
@@ -452,6 +467,7 @@ const styles = StyleSheet.create({
   closeBtn: {
     backgroundColor: COLORS.primary, width: '100%',
     paddingVertical: 16, borderRadius: 16, alignItems: 'center',
+    marginTop: 16,
   },
   closeBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 });
