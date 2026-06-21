@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
-import { collection, doc, getDoc, onSnapshot, orderBy, query } from 'firebase/firestore';
-import React, { useEffect, useState } from 'react';
+import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View, useColorScheme, Image,
 } from 'react-native';
@@ -67,26 +67,56 @@ export default function TokoScreen() {
     return unsub;
   }, []);
 
-  // Ambil dokumen stores/{storeId} untuk tiap storeId baru yang belum ada
-  // di cache. storeId di sini bisa berupa uid toko asli, atau (data lama)
-  // tokoNama — kalau dokumennya tidak ditemukan, ditandai null supaya
-  // grouping di bawah tahu harus fallback ke data menu.
+  // Listener real-time per dokumen stores/{storeId} → { imageUrl, address,
+  // isActive }. SEBELUMNYA ini pakai getDoc (baca sekali doang) — begitu
+  // id toko itu ada di cache, gak pernah di-fetch ulang, jadi kalau mitra
+  // toggle buka/tutup di web, app gak pernah tau sampai di-restart total.
+  // Sekarang tiap storeId baru dipasangin onSnapshot sendiri-sendiri, jadi
+  // begitu isActive berubah di Firestore, UI auto-update tanpa perlu
+  // keluar-masuk app. Listener disimpan di ref biar bisa di-cleanup waktu
+  // storeId itu sudah tidak relevan lagi (semua bag-nya hilang dari list).
+  const storeUnsubsRef = useRef<Record<string, () => void>>({});
+
   useEffect(() => {
-    const ids = Array.from(new Set(bags.map((b) => b.storeId).filter((id): id is string => !!id)));
-    const missing = ids.filter((id) => !(id in storeDocs));
-    if (missing.length === 0) return;
-    missing.forEach(async (id) => {
-      try {
-        const snap = await getDoc(doc(db, 'stores', id));
-        setStoreDocs((prev) => ({
-          ...prev,
-          [id]: snap.exists() ? (snap.data() as { imageUrl?: string; address?: string; isActive?: boolean }) : null,
-        }));
-      } catch {
-        setStoreDocs((prev) => ({ ...prev, [id]: null }));
+    const ids = new Set(bags.map((b) => b.storeId).filter((id): id is string => !!id));
+
+    // Pasang listener baru untuk storeId yang belum punya listener
+    ids.forEach((id) => {
+      if (storeUnsubsRef.current[id]) return; // sudah ada listener-nya
+      storeUnsubsRef.current[id] = onSnapshot(
+        doc(db, 'stores', id),
+        (snap) => {
+          setStoreDocs((prev) => ({
+            ...prev,
+            [id]: snap.exists()
+              ? (snap.data() as { imageUrl?: string; address?: string; isActive?: boolean })
+              : null,
+          }));
+        },
+        () => {
+          setStoreDocs((prev) => ({ ...prev, [id]: null }));
+        }
+      );
+    });
+
+    // Lepas listener untuk storeId yang sudah tidak ada lagi bag-nya
+    // (toko itu sudah tidak relevan ditampilkan), supaya tidak terus
+    // mendengarkan dokumen yang tidak lagi dipakai.
+    Object.keys(storeUnsubsRef.current).forEach((id) => {
+      if (!ids.has(id)) {
+        storeUnsubsRef.current[id]();
+        delete storeUnsubsRef.current[id];
       }
     });
-  }, [bags, storeDocs]);
+  }, [bags]);
+
+  // Cleanup semua listener toko saat komponen unmount (pindah tab/keluar layar)
+  useEffect(() => {
+    return () => {
+      Object.values(storeUnsubsRef.current).forEach((unsub) => unsub());
+      storeUnsubsRef.current = {};
+    };
+  }, []);
 
   // Group magic_bags berdasarkan storeId (fallback: tokoNama kalau storeId kosong)
   const tokoGroups: TokoGroup[] = React.useMemo(() => {

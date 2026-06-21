@@ -92,13 +92,46 @@ export async function registerForPushNotifications(): Promise<PushTokenResult> {
 }
 
 // FUNGSI BARU BIAR TIDAK ERROR LAGI
-export async function scheduleLocalNotification(title: string, body: string) {
+// data: payload tambahan yang ikut terbawa ke notification response saat
+// notif di-tap. Tanpa ini, tap notif cuma buka app ke state terakhir
+// (gak ada cara tau notif ini soal apa, jadi gak bisa diarahkan ke layar
+// yang relevan).
+export async function scheduleLocalNotification(
+  title: string,
+  body: string,
+  data?: Record<string, unknown>
+) {
   await Notifications.scheduleNotificationAsync({
     content: {
       title: title,
       body: body,
       sound: true,
+      data: data ?? {},
     },
     trigger: null,
   });
+}
+
+// Dipanggil sekali di root layout. Menangkap event "user TAP notifikasi"
+// (baik saat app di foreground/background, maupun saat notif itu yang
+// membuka app dari kondisi tertutup) dan memanggil onTap dengan data
+// payload yang disertakan saat notif dibuat di scheduleLocalNotification.
+export function addNotificationTapListener(
+  onTap: (data: Record<string, unknown>) => void
+) {
+  const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+    const data = response.notification.request.content.data as Record<string, unknown>;
+    onTap(data ?? {});
+  });
+  return () => subscription.remove();
+}
+
+// Dipanggil sekali di root layout untuk menangani kasus app dibuka DARI
+// KONDISI TERTUTUP TOTAL lewat tap notifikasi (cold start). Listener biasa
+// (addNotificationResponseReceivedListener) tidak menangkap tap yang
+// terjadi sebelum listener itu sempat terpasang.
+export async function getLastNotificationResponse(): Promise<Record<string, unknown> | null> {
+  const response = await Notifications.getLastNotificationResponseAsync();
+  if (!response) return null;
+  return (response.notification.request.content.data as Record<string, unknown>) ?? null;
 }

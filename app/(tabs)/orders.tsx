@@ -105,17 +105,20 @@ export default function OrdersScreen() {
           if (o.status === 'confirmed') {
             scheduleLocalNotification(
               'Pesanan Dikonfirmasi! 🎉',
-              `${o.namaMenu || o.tokoNama} di ${o.tokoNama} sudah dikonfirmasi toko. Tunjukkan kode pickup-nya ya saat ambil!`
+              `${o.namaMenu || o.tokoNama} di ${o.tokoNama} sudah dikonfirmasi toko. Tunjukkan kode pickup-nya ya saat ambil!`,
+              { screen: 'orders', orderId: o.id }
             );
           } else if (o.status === 'completed' || o.status === 'selesai') {
             scheduleLocalNotification(
               'Pesanan Selesai ✅',
-              `Terima kasih sudah belanja di ${o.tokoNama}! Sampai jumpa lagi.`
+              `Terima kasih sudah belanja di ${o.tokoNama}! Sampai jumpa lagi.`,
+              { screen: 'orders', orderId: o.id }
             );
           } else if (o.status === 'cancelled' || o.status === 'batal') {
             scheduleLocalNotification(
               'Pesanan Dibatalkan',
-              `Pesanan kamu di ${o.tokoNama} dibatalkan oleh toko.`
+              `Pesanan kamu di ${o.tokoNama} dibatalkan oleh toko.`,
+              { screen: 'orders', orderId: o.id }
             );
           }
         }
