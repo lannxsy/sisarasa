@@ -249,9 +249,17 @@
 
     // ── Render baris tabel ─────────────────────────────────────────────────────
     function renderRow(id, data) {
-      const statusBadge = data.isActive
-        ? `<span class="badge badge-confirmed">Aktif</span>`
-        : `<span class="badge badge-cancelled">Nonaktif</span>`;
+      // Status di tabel ini gabungan dua hal: toggle manual "Aktifkan
+      // Langsung" (data.isActive) DAN stok real-time. Kalau stok 0, badge
+      // ikut nampilin Stok Habis walau isActive-nya sendiri masih true —
+      // ini cuma soal TAMPILAN, field isActive di Firestore TIDAK diubah,
+      // jadi begitu di-restock admin gak perlu nyalain ulang toggle-nya.
+      const stokHabis = (data.stock ?? 0) <= 0;
+      const statusBadge = !data.isActive
+        ? `<span class="badge badge-cancelled">Nonaktif</span>`
+        : stokHabis
+        ? `<span class="badge badge-cancelled">Stok Habis</span>`
+        : `<span class="badge badge-confirmed">Aktif</span>`;
       const thumb = data.imageUrl
         ? `<img src="${data.imageUrl}" style="width:36px;height:36px;border-radius:8px;object-fit:cover;margin-right:8px" onerror="this.style.display='none'">`
         : `<span style="margin-right:8px">${data.emoji || '🛍️'}</span>`;
@@ -417,7 +425,12 @@
         let magicBagId = existingMagicBagId;
 
         if (docId) {
-          // UPDATE
+          // UPDATE — sertakan menuDocId di magic_bags supaya app (saat ada
+          // order) bisa balik nyari & ikut update stores/.../menus.stock.
+          // Ini juga jadi "self-heal" buat menu LAMA yang dibuat sebelum
+          // field menuDocId ini ada — begitu admin edit & simpan sekali,
+          // link-nya otomatis kebuat.
+          magicBagPayload.menuDocId = docId;
           await updateDoc(doc(db, 'stores', uid, 'menus', docId), menuPayload);
           if (magicBagId) {
             await updateDoc(doc(db, 'magic_bags', magicBagId), magicBagPayload);
@@ -429,7 +442,10 @@
           const mbRef = await addDoc(collection(db, 'magic_bags'), magicBagPayload);
           magicBagId = mbRef.id;
           menuPayload.magicBagId = magicBagId;
-          await addDoc(collection(db, 'stores', uid, 'menus'), menuPayload);
+          const menuRef = await addDoc(collection(db, 'stores', uid, 'menus'), menuPayload);
+          // Simpan balik menuDocId ke magic_bags, biar dua dokumen ini
+          // saling terhubung dan stok-nya bisa disinkronkan pas ada order.
+          await updateDoc(doc(db, 'magic_bags', magicBagId), { menuDocId: menuRef.id });
         }
 
         bootstrap.Modal.getInstance(document.getElementById('mbModal')).hide();

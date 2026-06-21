@@ -23,7 +23,11 @@
       },
       "useNextNotificationsApi": true,
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -61,7 +65,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "2f3da30f-1104-4c09-b16f-f35983962ed9"
+        "projectId": "cb4782b1-ba75-4f50-9d59-bbaefbc4cce6"
       }
     },
     "owner": "alxsy"

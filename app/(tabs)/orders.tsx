@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, FlatList, StyleSheet, useColorScheme,
-  Pressable, Modal, ActivityIndicator, Linking, Image,
+  Pressable, Modal, ActivityIndicator, Linking, Image, Alert,
 } from 'react-native';
 import { collection, onSnapshot, query, orderBy, where, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { auth, db } from '../lib/firebase';
+import { registerForPushNotifications, scheduleLocalNotification } from '../lib/notifications';
 import { COLORS } from '@/constants/theme';
 
 interface Order {
@@ -66,6 +67,21 @@ export default function OrdersScreen() {
   const [locationLoading, setLocationLoading] = useState(false);
   const userId = auth.currentUser?.uid;
 
+  // Lacak status TERAKHIR yang udah pernah keliatan per order id, biar bisa
+  // bedain "status beneran baru berubah barusan" vs "ini emang dari awal
+  // udah confirmed/completed pas listener pertama kali nyala" (misal pas
+  // app baru dibuka). Tanpa ini, buka app sekali bisa langsung nge-notif
+  // SEMUA pesanan lama yang udah confirmed dari kemarin-kemarin.
+  const prevStatusRef = useRef<Record<string, Order['status']>>({});
+  const isFirstSnapshotRef = useRef(true);
+
+  // Minta izin notifikasi sekali pas tab Pesanan pertama dibuka. Local
+  // notification (scheduleLocalNotification) tetap butuh izin ini biar
+  // beneran muncul, walau kita gak pernah pakai expo push token-nya di sini.
+  useEffect(() => {
+    registerForPushNotifications().catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!userId) return;
     const q = query(
@@ -74,8 +90,38 @@ export default function OrdersScreen() {
       orderBy('createdAt', 'desc')
     );
     const unsub = onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Order, 'id'>) })));
+      const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Order, 'id'>) }));
+      setOrders(list);
       setLoading(false);
+
+      // Notif lokal cuma muncul SELAMA APP KEBUKA (listener ini jalan).
+      // Ini bukan push notification beneran dari server — kalau mau notif
+      // tetep masuk pas app fully closed, butuh Cloud Function terpisah
+      // yang ngirim lewat Expo Push API pas admin update status di web.
+      for (const o of list) {
+        const prev = prevStatusRef.current[o.id];
+        const changed = !isFirstSnapshotRef.current && !!prev && prev !== o.status;
+        if (changed) {
+          if (o.status === 'confirmed') {
+            scheduleLocalNotification(
+              'Pesanan Dikonfirmasi! 🎉',
+              `${o.namaMenu || o.tokoNama} di ${o.tokoNama} sudah dikonfirmasi toko. Tunjukkan kode pickup-nya ya saat ambil!`
+            );
+          } else if (o.status === 'completed' || o.status === 'selesai') {
+            scheduleLocalNotification(
+              'Pesanan Selesai ✅',
+              `Terima kasih sudah belanja di ${o.tokoNama}! Sampai jumpa lagi.`
+            );
+          } else if (o.status === 'cancelled' || o.status === 'batal') {
+            scheduleLocalNotification(
+              'Pesanan Dibatalkan',
+              `Pesanan kamu di ${o.tokoNama} dibatalkan oleh toko.`
+            );
+          }
+        }
+        prevStatusRef.current[o.id] = o.status;
+      }
+      isFirstSnapshotRef.current = false;
     });
     return unsub;
   }, [userId]);
@@ -110,12 +156,31 @@ export default function OrdersScreen() {
     Linking.openURL(url).catch(() => {});
   };
 
+  const handleCardPress = (item: Order) => {
+    // Selagi masih 'pending' (Menunggu), toko belum acc pesanan ini —
+    // kode pickup-nya jangan ditunjukkan dulu. Modal/QR baru boleh dibuka
+    // setelah status berubah jadi 'confirmed' (atau status lanjutannya).
+    if (item.status === 'pending') {
+      Alert.alert(
+        'Menunggu Konfirmasi',
+        'Pesanan kamu masih menunggu konfirmasi dari toko. Kode pickup akan muncul setelah pesanan dikonfirmasi.'
+      );
+      return;
+    }
+    setQrModal(item);
+  };
+
   const renderItem = ({ item }: { item: Order }) => {
     const st = STATUS_LABEL[item.status] ?? STATUS_LABEL.pending;
+    const isPending = item.status === 'pending';
     return (
       <Pressable
-        style={[styles.card, { backgroundColor: isDark ? COLORS.gray800 : COLORS.white }]}
-        onPress={() => setQrModal(item)}
+        style={[
+          styles.card,
+          { backgroundColor: isDark ? COLORS.gray800 : COLORS.white },
+          isPending && styles.cardDisabled,
+        ]}
+        onPress={() => handleCardPress(item)}
       >
         <View style={styles.cardEmoji}>
           {item.imageUrl ? (
@@ -302,6 +367,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07, shadowRadius: 6,
   },
+  cardDisabled: { opacity: 0.6 },
   cardEmoji: {
     width: 50, height: 50, borderRadius: 12,
     backgroundColor: COLORS.primaryLight,

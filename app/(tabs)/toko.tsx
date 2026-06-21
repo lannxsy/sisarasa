@@ -38,6 +38,8 @@ interface TokoGroup {
   totalMenu: number;
   totalStok: number;
   hargaTermurah: number;
+  adaStokTersedia: boolean;
+  tokoBuka: boolean;
   jamPickup: string;
   lat?: number;
   lng?: number;
@@ -54,7 +56,7 @@ export default function TokoScreen() {
   // menimpa foto & alamat hasil grouping dari magic_bags, supaya kartu
   // toko di list ini tampil foto TOKO (dari Pengaturan Toko), bukan foto
   // menu pertama milik toko itu.
-  const [storeDocs, setStoreDocs] = useState<Record<string, { imageUrl?: string; address?: string } | null>>({});
+  const [storeDocs, setStoreDocs] = useState<Record<string, { imageUrl?: string; address?: string; isActive?: boolean } | null>>({});
 
   useEffect(() => {
     const q = query(collection(db, 'magic_bags'), orderBy('createdAt', 'desc'));
@@ -78,7 +80,7 @@ export default function TokoScreen() {
         const snap = await getDoc(doc(db, 'stores', id));
         setStoreDocs((prev) => ({
           ...prev,
-          [id]: snap.exists() ? (snap.data() as { imageUrl?: string; address?: string }) : null,
+          [id]: snap.exists() ? (snap.data() as { imageUrl?: string; address?: string; isActive?: boolean }) : null,
         }));
       } catch {
         setStoreDocs((prev) => ({ ...prev, [id]: null }));
@@ -90,13 +92,21 @@ export default function TokoScreen() {
   const tokoGroups: TokoGroup[] = React.useMemo(() => {
     const map = new Map<string, TokoGroup>();
     for (const bag of bags) {
-      if (bag.stok <= 0) continue;
+      // DULU: bag stok 0 di-skip total (continue) dari grouping. Itu bikin
+      // toko yang cuma punya 1 menu langsung HILANG dari list pas stoknya
+      // habis (bukan ditampilkan "Stok Habis"). Sekarang menu tetap masuk
+      // grouping; status tersedia/habis-nya ditandai lewat adaStokTersedia,
+      // dan ditampilkan di kartu toko (lihat renderItem) — bukan disembunyikan.
+      const tersedia = bag.stok > 0;
       const key = bag.storeId || bag.tokoNama;
       const existing = map.get(key);
       if (existing) {
         existing.totalMenu += 1;
-        existing.totalStok += bag.stok;
-        if (bag.harga < existing.hargaTermurah) existing.hargaTermurah = bag.harga;
+        if (tersedia) {
+          existing.totalStok += bag.stok;
+          existing.adaStokTersedia = true;
+          if (bag.harga < existing.hargaTermurah) existing.hargaTermurah = bag.harga;
+        }
         if (!existing.kategoriList.includes(bag.kategori)) existing.kategoriList.push(bag.kategori);
         // imageUrl/alamat dari menu HANYA dipakai sebagai fallback data lama
         // (storeExists === false). Kalau dokumen stores sudah ada, foto &
@@ -113,8 +123,13 @@ export default function TokoScreen() {
           alamat: storeExists ? (storeDoc!.address ?? bag.alamat) : bag.alamat,
           kategoriList: [bag.kategori],
           totalMenu: 1,
-          totalStok: bag.stok,
-          hargaTermurah: bag.harga,
+          totalStok: tersedia ? bag.stok : 0,
+          hargaTermurah: tersedia ? bag.harga : Infinity,
+          adaStokTersedia: tersedia,
+          // Sama kayak settings.html: kalau field isActive belum pernah
+          // di-set (toko lama/belum pernah disentuh togglenya), defaultnya
+          // dianggap BUKA (true), bukan tutup.
+          tokoBuka: storeDoc?.isActive !== false,
           jamPickup: bag.jamPickup,
           lat: bag.lat,
           lng: bag.lng,
@@ -131,39 +146,57 @@ export default function TokoScreen() {
       t.kategoriList.some((k) => k.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const renderItem = ({ item }: { item: TokoGroup }) => (
-    <Pressable
-      style={[styles.card, { backgroundColor: isDark ? COLORS.gray800 : COLORS.white }]}
-      onPress={() => router.push({ pathname: '/toko-detail', params: { storeId: item.storeId } })}
-    >
-      <View style={styles.cardImageWrap}>
-        {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.cardImage} resizeMode="cover" />
-        ) : (
-          <ThemedText style={styles.emoji}>{item.emoji}</ThemedText>
-        )}
-      </View>
-      <View style={{ flex: 1 }}>
-        <ThemedText style={styles.tokoName}>{item.tokoNama}</ThemedText>
-        <ThemedText style={styles.kategori} numberOfLines={1}>
-          {item.kategoriList.join(', ')}
-        </ThemedText>
-        <View style={styles.pickupRow}>
-          <Ionicons name="time-outline" size={12} color={COLORS.gray400} />
-          <ThemedText style={styles.pickupText}> {item.jamPickup}</ThemedText>
+  const renderItem = ({ item }: { item: TokoGroup }) => {
+    // Toko tutup itu kondisi yang LEBIH dominan daripada stok habis — kalau
+    // tokonya ditutup admin, gak peduli stoknya ada atau nggak, pembeli
+    // tetap harus liat "Toko Tutup", bukan "Stok Habis".
+    const redup = !item.tokoBuka || !item.adaStokTersedia;
+    return (
+      <Pressable
+        style={[
+          styles.card,
+          { backgroundColor: isDark ? COLORS.gray800 : COLORS.white },
+          redup && styles.cardHabis,
+        ]}
+        onPress={() => router.push({ pathname: '/toko-detail', params: { storeId: item.storeId } })}
+      >
+        <View style={styles.cardImageWrap}>
+          {item.imageUrl ? (
+            <Image source={{ uri: item.imageUrl }} style={styles.cardImage} resizeMode="cover" />
+          ) : (
+            <ThemedText style={styles.emoji}>{item.emoji}</ThemedText>
+          )}
         </View>
-        <ThemedText style={styles.hargaMulai}>
-          Mulai Rp {item.hargaTermurah.toLocaleString('id-ID')}
-        </ThemedText>
-      </View>
-      <View style={{ alignItems: 'flex-end', gap: 6 }}>
-        <View style={styles.menuBadge}>
-          <ThemedText style={styles.menuBadgeText}>{item.totalMenu} menu</ThemedText>
+        <View style={{ flex: 1 }}>
+          <ThemedText style={styles.tokoName}>{item.tokoNama}</ThemedText>
+          <ThemedText style={styles.kategori} numberOfLines={1}>
+            {item.kategoriList.join(', ')}
+          </ThemedText>
+          <View style={styles.pickupRow}>
+            <Ionicons name="time-outline" size={12} color={COLORS.gray400} />
+            <ThemedText style={styles.pickupText}> {item.jamPickup}</ThemedText>
+          </View>
+          {!item.tokoBuka ? (
+            <ThemedText style={styles.habisText}>Toko Tutup</ThemedText>
+          ) : item.adaStokTersedia ? (
+            <ThemedText style={styles.hargaMulai}>
+              Mulai Rp {item.hargaTermurah.toLocaleString('id-ID')}
+            </ThemedText>
+          ) : (
+            <ThemedText style={styles.habisText}>Stok Habis</ThemedText>
+          )}
         </View>
-        <Ionicons name="chevron-forward" size={18} color={COLORS.gray400} />
-      </View>
-    </Pressable>
-  );
+        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+          <View style={[styles.menuBadge, redup && styles.menuBadgeHabis]}>
+            <ThemedText style={[styles.menuBadgeText, redup && styles.menuBadgeTextHabis]}>
+              {!item.tokoBuka ? 'Tutup' : `${item.totalMenu} menu`}
+            </ThemedText>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={COLORS.gray400} />
+        </View>
+      </Pressable>
+    );
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -218,6 +251,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07, shadowRadius: 6,
   },
+  cardHabis: { opacity: 0.55 },
   cardImageWrap: {
     width: 56, height: 56, borderRadius: 14,
     backgroundColor: COLORS.primaryLight,
@@ -231,11 +265,14 @@ const styles = StyleSheet.create({
   pickupRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
   pickupText: { fontSize: 11, color: COLORS.gray400 },
   hargaMulai: { fontSize: 13, fontWeight: '800', color: COLORS.primary, marginTop: 4 },
+  habisText: { fontSize: 13, fontWeight: '800', color: COLORS.danger, marginTop: 4 },
   menuBadge: {
     backgroundColor: COLORS.primaryLight,
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
   },
+  menuBadgeHabis: { backgroundColor: '#fee2e2' },
   menuBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.primaryDark },
+  menuBadgeTextHabis: { color: COLORS.danger },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   emptyText: { fontSize: 14, color: COLORS.gray400 },
 });

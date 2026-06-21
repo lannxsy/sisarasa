@@ -210,15 +210,20 @@
     }
 
     // ── Real-time listener ────────────────────────────────────────────────────
-    // Catatan: kita TIDAK bisa where('storeId','==',uid) sendirian karena
-    // order lama tidak punya field storeId sama sekali (akan ke-skip oleh
-    // Firestore). Jadi kita dengarkan SEMUA order milik database yang bisa
-    // dibaca rules (read diizinkan kalau auth.uid cocok userId ATAU storeId
-    // pada dokumen tsb -- untuk order lama tanpa storeId, rules cocokkan
-    // lewat field lain; lihat catatan firestore.rules), lalu filter manual
-    // di client memakai belongsToStore.
+    // WAJIB pakai where('storeId','==',uid) — bukan opsional. Rule baca
+    // orders berbasis ISI dokumen (auth.uid harus cocok userId ATAU storeId
+    // pada dokumen itu), jadi Firestore gak bisa membuktikan query TANPA
+    // where ini aman buat semua kemungkinan hasil, dan akan MENOLAK TOTAL
+    // request-nya (permission-denied) — bukan diam-diam nyaring di server.
+    // Konsekuensi: order lama dari sebelum field storeId konsisten diisi
+    // gak akan muncul di sini lagi; itu data lama, lebih baik begitu
+    // daripada listener-nya gagal buat semua toko.
     function listenOrders() {
-      const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+      const q = query(
+        collection(db, 'orders'),
+        where('storeId', '==', uid),
+        orderBy('createdAt', 'desc')
+      );
 
       onSnapshot(q, (snapshot) => {
         ordersCache = {};

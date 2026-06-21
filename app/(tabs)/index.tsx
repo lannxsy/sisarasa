@@ -14,6 +14,7 @@ import { COLORS } from '@/constants/theme';
 
 interface MagicBag {
   id: string;
+  storeId?: string;
   tokoNama: string;
   kategori: string;
   harga: number;
@@ -45,7 +46,14 @@ function buatHTMLPeta(bags: MagicBag[], userLat: number, userLng: number) {
           iconAnchor: [13, 13],
         })
       }).addTo(map).on('click', function() {
-        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(${JSON.stringify('PIN:')} + ${JSON.stringify(b.id)});
+        // Tap pin di peta -> ke halaman TOKO (semua menu toko itu),
+        // bukan langsung ke 1 Magic Bag spesifik. Kirim storeId (dan
+        // bagId sebagai fallback kalau storeId kosong di data lama).
+        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'PIN',
+          bagId: ${JSON.stringify(b.id)},
+          storeId: ${JSON.stringify(b.storeId || '')}
+        }));
       });
     `
     )
@@ -134,10 +142,20 @@ export default function HomeScreen() {
   const mapHtml = buatHTMLPeta(bagsTersedia, userLat, userLng);
 
   const handleMessage = (event: { nativeEvent: { data: string } }) => {
-    const data = event.nativeEvent.data;
-    if (data.startsWith('PIN:')) {
-      const bagId = data.slice(4);
-      router.push({ pathname: '/detail', params: { id: bagId } });
+    try {
+      const payload = JSON.parse(event.nativeEvent.data);
+      if (payload?.type === 'PIN') {
+        if (payload.storeId) {
+          // Pencet titik di peta -> ke halaman TOKO (semua menu toko itu),
+          // bukan langsung ke 1 Magic Bag spesifik.
+          router.push({ pathname: '/toko-detail', params: { storeId: payload.storeId } });
+        } else if (payload.bagId) {
+          // Fallback untuk data lama yang belum punya storeId di magic_bags.
+          router.push({ pathname: '/detail', params: { id: payload.bagId } });
+        }
+      }
+    } catch {
+      // Pesan dari WebView gak valid JSON — abaikan saja.
     }
   };
 

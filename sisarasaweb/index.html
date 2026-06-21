@@ -265,13 +265,18 @@
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // TIDAK pakai where('storeId','==', uid) — order lama gak punya field
-      // itu, jadi bakal ke-skip total. Sama seperti orders.html: ambil
-      // semua order (read rules memang mengizinkan ini), lalu filter di
-      // client pakai belongsToStore (storeId ATAU bagId cocok daftar menu
-      // toko ini).
+      // PAKAI where('storeId','==', uid) — WAJIB, bukan opsional. Rules
+      // orders cuma ngizinin baca dokumen yang storeId/userId-nya cocok
+      // sama uid yang login; itu rule berbasis ISI dokumen (resource-based),
+      // jadi Firestore gak bisa "buktiin" query tanpa where ini aman buat
+      // semua kemungkinan hasil — query SELURUH koleksi tanpa filter bakal
+      // DITOLAK TOTAL (permission-denied), bukan cuma kefilter di server.
+      // Konsekuensinya: order lama (dari sebelum field storeId selalu
+      // diisi) gak akan kehitung di sini — itu sudah jadi data lama,
+      // baiknya dibiarkan saja daripada query-nya gagal buat semua orang.
       const ordersQ = query(
         collection(db, 'orders'),
+        where('storeId', '==', uid),
         orderBy('createdAt', 'desc'),
         limit(50)
       );
@@ -282,8 +287,16 @@
         let shown = 0;
 
         // Omzet 7 hari terakhir (Senin–Minggu minggu berjalan), buat chart.
-        // Key-nya 'YYYY-MM-DD' format lokal, diisi 0 dulu biar hari tanpa
+        // Key-nya 'YYYY-MM-DD' format lokal (BUKAN toISOString, yang
+        // ngonversi ke UTC dan bikin tanggal geser mundur 1 hari buat
+        // timezone UTC+, misal WIB) — diisi 0 dulu biar hari tanpa
         // transaksi tetap muncul sebagai titik 0, bukan hilang dari chart.
+        function localDateKey(date) {
+          const y = date.getFullYear();
+          const m = String(date.getMonth() + 1).padStart(2, '0');
+          const dd = String(date.getDate()).padStart(2, '0');
+          return `${y}-${m}-${dd}`;
+        }
         const dayKeys = [];
         const dayLabels = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
         const revenueByDay = {};
@@ -291,7 +304,7 @@
           const d = new Date();
           d.setHours(0, 0, 0, 0);
           d.setDate(d.getDate() - i);
-          const key = d.toISOString().slice(0, 10);
+          const key = localDateKey(d);
           dayKeys.push(key);
           revenueByDay[key] = 0;
         }
@@ -318,7 +331,7 @@
 
           // Akumulasi omzet harian buat chart (7 hari terakhir, status completed saja)
           if (d.status === 'completed' && createdDate) {
-            const key = createdDate.toISOString().slice(0, 10);
+            const key = localDateKey(createdDate);
             if (key in revenueByDay) revenueByDay[key] += d.totalPrice;
           }
 

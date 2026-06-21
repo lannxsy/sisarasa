@@ -138,16 +138,23 @@ export default function TokoDetailScreen() {
     lng: storeExists ? storeDoc!.longitude : bags[0].lng,
     jamPickup: bags[0].jamPickup,
     emoji: bags[0].emoji,
+    // Default BUKA (true) kalau dokumen stores belum ada atau field
+    // isActive belum pernah di-set — konsisten sama default checkbox di
+    // settings.html ("checked" + `data.isActive !== false`).
+    tokoBuka: storeExists ? storeDoc!.isActive !== false : true,
   };
 
   const renderMenuItem = ({ item }: { item: MagicBag }) => {
     const habis = item.stok <= 0;
+    // Toko tutup itu lebih dominan dari stok habis — kalau admin matiin
+    // toko, pembeli gak boleh checkout sama sekali walau stoknya masih ada.
+    const tidakBisaPesan = habis || !toko.tokoBuka;
     const diskon = Math.round((1 - item.harga / item.hargaAsli) * 100);
     return (
       <Pressable
-        style={[styles.menuCard, { backgroundColor: isDark ? COLORS.gray800 : COLORS.white, opacity: habis ? 0.55 : 1 }]}
+        style={[styles.menuCard, { backgroundColor: isDark ? COLORS.gray800 : COLORS.white, opacity: tidakBisaPesan ? 0.55 : 1 }]}
         onPress={() => router.push({ pathname: '/detail', params: { id: item.id } })}
-        disabled={habis}
+        disabled={tidakBisaPesan}
       >
         <View style={styles.menuImageWrap}>
           {item.imageUrl ? (
@@ -169,9 +176,9 @@ export default function TokoDetailScreen() {
             <ThemedText style={styles.hargaAsli}>Rp {item.hargaAsli.toLocaleString('id-ID')}</ThemedText>
           </View>
         </View>
-        <View style={[styles.stokBadge, { backgroundColor: habis ? '#fee2e2' : COLORS.primaryLight }]}>
-          <ThemedText style={[styles.stokText, { color: habis ? COLORS.danger : COLORS.primaryDark }]}>
-            {habis ? 'Habis' : `${item.stok} sisa`}
+        <View style={[styles.stokBadge, { backgroundColor: tidakBisaPesan ? '#fee2e2' : COLORS.primaryLight }]}>
+          <ThemedText style={[styles.stokText, { color: tidakBisaPesan ? COLORS.danger : COLORS.primaryDark }]}>
+            {!toko.tokoBuka ? 'Tutup' : habis ? 'Habis' : `${item.stok} sisa`}
           </ThemedText>
         </View>
       </Pressable>
@@ -204,6 +211,15 @@ export default function TokoDetailScreen() {
               <ThemedText style={[styles.tokoName, { color: isDark ? '#fff' : COLORS.dark }]}>
                 {toko.tokoNama}
               </ThemedText>
+
+              {!toko.tokoBuka && (
+                <View style={styles.closedBanner}>
+                  <Ionicons name="moon-outline" size={16} color={COLORS.danger} />
+                  <ThemedText style={styles.closedBannerText}>
+                    Toko sedang tutup — belum bisa pesan dulu sekarang
+                  </ThemedText>
+                </View>
+              )}
 
               <View style={[styles.infoCard, { backgroundColor: isDark ? COLORS.gray800 : COLORS.gray100 }]}>
                 <View style={styles.infoRow}>
@@ -255,6 +271,12 @@ const styles = StyleSheet.create({
   },
   tokoInfo: { paddingHorizontal: 18, paddingTop: 16 },
   tokoName: { fontSize: 20, fontWeight: '800', marginBottom: 12 },
+  closedBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#fee2e2', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
+  },
+  closedBannerText: { fontSize: 12.5, fontWeight: '700', color: COLORS.danger, flex: 1 },
   infoCard: { borderRadius: 12, padding: 12, gap: 8, marginBottom: 12 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   infoText: { fontSize: 13 },

@@ -253,6 +253,29 @@
 
     document.addEventListener('sisarasa:mapReady', movePinIfReady);
 
+    // ── Auto-save toggle "Toko Buka" ────────────────────────────────────────
+    // Toggle ini ada di kartu terpisah (Status Toko) dari tombol "Simpan
+    // Perubahan" (yang cuma nyimpen kartu Profil & Lokasi). Sebelumnya toggle
+    // ini gak punya cara simpan sendiri, jadi kalau cuma digeser tanpa balik
+    // klik "Simpan Perubahan", perubahannya gak pernah nyampe ke Firestore —
+    // toko keliatan masih "Buka" di app walau togglenya udah dimatiin di sini.
+    // Sekarang auto-save begitu di-toggle, gak perlu nunggu form satunya.
+    if (storeStatusInput) {
+      storeStatusInput.addEventListener('change', async () => {
+        const newValue = storeStatusInput.checked;
+        storeStatusInput.disabled = true;
+        try {
+          await setDoc(storeRef(), { isActive: newValue, updatedAt: new Date() }, { merge: true });
+        } catch (err) {
+          // Gagal simpan — balikin toggle ke posisi semula biar gak nipu user
+          storeStatusInput.checked = !newValue;
+          alert('Gagal menyimpan status toko: ' + err.message);
+        } finally {
+          storeStatusInput.disabled = false;
+        }
+      });
+    }
+
     // Fungsi Save Data
     saveBtn.addEventListener('click', async () => {
       saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Menyimpan...';

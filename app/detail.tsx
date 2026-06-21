@@ -26,6 +26,12 @@ interface MagicBag {
   alamat?: string;
   lat?: number;
   lng?: number;
+  // Backlink ke stores/{storeId}/menus/{menuDocId} — dipakai pas checkout
+  // biar stok di halaman admin "Kelola Menu" ikut ke-update juga, bukan
+  // cuma stok di magic_bags. Field ini cuma ada di menu yang dibuat/diedit
+  // setelah fix sinkronisasi stok; menu lama mungkin belum punya ini sampai
+  // diedit ulang sekali oleh admin.
+  menuDocId?: string;
 }
 
 function generateKode() {
@@ -144,6 +150,7 @@ export default function DetailScreen() {
         if (stokSekarang < jumlah) {
           throw new Error('Stok tidak mencukupi, sudah diambil pembeli lain.');
         }
+        const stokBaru = stokSekarang - jumlah;
 
         tx.set(orderRef, {
           userId: auth.currentUser!.uid,
@@ -165,7 +172,17 @@ export default function DetailScreen() {
           // di statistik manapun walau statusnya udah completed.
           createdAt: serverTimestamp(),
         });
-        tx.update(bagRef, { stok: stokSekarang - jumlah });
+        tx.update(bagRef, { stok: stokBaru });
+
+        // Stok di magic_bags (dipakai app) dan stok di stores/{uid}/menus
+        // (dipakai halaman admin "Kelola Menu") itu DUA dokumen terpisah.
+        // Kalau cuma magic_bags yang di-update, angka stok di Kelola Menu
+        // bakal mandek/gak pernah berubah walau pesanan sudah selesai.
+        // Makanya keduanya WAJIB di-update bareng dalam transaksi yang sama.
+        if (bag.menuDocId) {
+          const menuRef = doc(db, 'stores', bag.storeId, 'menus', bag.menuDocId);
+          tx.update(menuRef, { stock: stokBaru });
+        }
       });
 
       setOrdering(false);
