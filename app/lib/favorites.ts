@@ -13,6 +13,7 @@ export interface FavoriteData {
   harga: number;
   hargaAsli: number;
   emoji: string;
+  imageUrl?: string;
   jamPickup?: string;
   alamat?: string;
 }

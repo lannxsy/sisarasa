@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { collection, onSnapshot, query, orderBy, where, doc, getDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
+import QRCode from 'react-native-qrcode-svg';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { auth, db } from '../lib/firebase';
@@ -16,7 +17,7 @@ interface Order {
   namaMenu?: string;
   imageUrl?: string;
   harga: number;
-  status: 'pending' | 'confirmed' | 'selesai' | 'batal';
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
   createdAt: number;
   kodePickup: string;
   emoji: string;
@@ -34,7 +35,9 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   pending:   { label: 'Menunggu',     color: '#f59e0b' },
   confirmed: { label: 'Dikonfirmasi', color: COLORS.primary },
   selesai:   { label: 'Selesai',      color: '#6366f1' },
+  completed: { label: 'Selesai',      color: '#6366f1' },
   batal:     { label: 'Dibatalkan',   color: COLORS.danger },
+  cancelled: { label: 'Dibatalkan',   color: COLORS.danger },
 };
 
 export default function OrdersScreen() {
@@ -165,24 +168,17 @@ export default function OrdersScreen() {
               <ThemedText style={styles.modalMenuName}>{qrModal.namaMenu}</ThemedText>
             ) : null}
 
-            {/* QR dummy */}
+            {/* QR asli — link ke halaman pickup, di-scan pakai kamera HP
+                BIASA (bukan dari app), langsung tandai pesanan selesai */}
             <View style={styles.qrWrap}>
-              <View style={styles.qrGrid}>
-                {Array.from({ length: 25 }).map((_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.qrCell,
-                      {
-                        backgroundColor:
-                          [0,1,2,3,4,5,9,10,14,15,19,20,21,22,23,24,7,17,12].includes(i)
-                            ? (isDark ? '#fff' : '#0f172a')
-                            : 'transparent',
-                      },
-                    ]}
-                  />
-                ))}
-              </View>
+              {qrModal?.kodePickup ? (
+                <QRCode
+                  value={`https://sisarasa-3f969.web.app/pickup.html?oid=${qrModal.id}&kode=${qrModal.kodePickup}`}
+                  size={170}
+                  color={isDark ? '#fff' : '#0f172a'}
+                  backgroundColor="transparent"
+                />
+              ) : null}
             </View>
 
             {/* Kode */}

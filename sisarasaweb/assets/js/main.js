@@ -1,32 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // Chart initialization for Dashboard
-  const ctx = document.getElementById('revenueChart');
-  if (ctx) {
-    new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'],
-        datasets: [{
-          label: 'Omzet (Rp)',
-          data: [150000, 230000, 180000, 320000, 410000, 550000, 480000],
-          borderColor: '#ff6b6b',
-          backgroundColor: 'rgba(255, 107, 107, 0.1)',
-          borderWidth: 2,
-          fill: true,
-          tension: 0.4
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false }
-        },
-        scales: {
-          y: { beginAtZero: true }
-        }
-      }
-    });
-  }
+  // Chart "Tren Omzet Mingguan" sekarang dirender dari data Firestore asli
+  // di index.html (lihat startDashboard -> renderRevenueChart), bukan di
+  // sini lagi. Dulu di sini ada Chart.js dengan angka hardcoded yang selalu
+  // tampil walau toko belum ada transaksi sama sekali — itu yang bikin
+  // dashboard kelihatan "udah jalan" padahal omzet sebenarnya masih 0.
 
   // Leaflet Map initialization for Stores
   let map;

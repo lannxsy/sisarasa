@@ -173,6 +173,37 @@
       return Math.floor(diff / 86400) + ' hari lalu';
     }
 
+    // Chart digambar ulang tiap kali data order berubah (real-time), bukan
+    // sekali pas halaman load dengan angka hardcoded. instance lama
+    // di-destroy dulu sebelum gambar yang baru, biar Chart.js gak numpuk
+    // canvas/listener tiap kali onSnapshot fire.
+    let revenueChartInstance = null;
+    function renderRevenueChart(labels, data) {
+      const ctx = document.getElementById('revenueChart');
+      if (!ctx) return;
+      if (revenueChartInstance) revenueChartInstance.destroy();
+      revenueChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Omzet (Rp)',
+            data,
+            borderColor: '#ff6b6b',
+            backgroundColor: 'rgba(255, 107, 107, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true } },
+        },
+      });
+    }
+
     const statusIcon = {
       pending: '<i class="fa-solid fa-clock fs-4 text-warning"></i>',
       confirmed: '<i class="fa-solid fa-circle-check fs-4 text-primary"></i>',
@@ -180,9 +211,42 @@
       cancelled: '<i class="fa-solid fa-times-circle fs-4 text-danger"></i>',
     };
 
+    // ── Normalisasi dokumen order ───────────────────────────────────────────
+    // Sama seperti di orders.html: order baru pakai itemName/qty/totalPrice,
+    // order lama pakai tokoNama/jumlah/harga. Tanpa ini, order lama tampil
+    // sebagai "Rp 0" / nama kosong di dashboard walau datanya sebenarnya ada.
+    function normalizeOrder(data) {
+      return {
+        itemName: data.itemName || data.tokoNama || 'Pesanan',
+        buyerName: data.buyerName || data.userEmail || '-',
+        qty: Number(data.qty || data.jumlah || 1),
+        totalPrice: Number(data.totalPrice ?? data.harga ?? 0),
+        status: data.status || 'pending',
+        createdAt: data.createdAt,
+      };
+    }
+
     let started = false; // jaga-jaga supaya listener tidak dipasang dua kali
 
-    function startDashboard(uid) {
+    // bagId (magic_bags) milik toko ini. Dipakai sebagai fallback untuk
+    // mencocokkan order LAMA yang dibuat sebelum field storeId ada di
+    // dokumen orders — sama persis pola yang dipakai orders.html, supaya
+    // dashboard & halaman Kelola Pesanan menghitung order yang sama.
+    let myBagIds = new Set();
+
+    async function loadMyBagIds(uid) {
+      try {
+        const menuSnap = await getDocs(collection(db, 'stores', uid, 'menus'));
+        menuSnap.forEach(d => {
+          const magicBagId = d.data().magicBagId;
+          if (magicBagId) myBagIds.add(magicBagId);
+        });
+      } catch (err) {
+        console.error('Gagal memuat daftar magic bag toko:', err);
+      }
+    }
+
+    async function startDashboard(uid) {
       if (started) return;
       started = true;
 
@@ -195,15 +259,21 @@
         if (av) av.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(storedName)}&background=ff6b6b&color=fff`;
       }
 
+      await loadMyBagIds(uid);
+
       // ── Real-time orders listener ───────────────────────────────────────────
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
+      // TIDAK pakai where('storeId','==', uid) — order lama gak punya field
+      // itu, jadi bakal ke-skip total. Sama seperti orders.html: ambil
+      // semua order (read rules memang mengizinkan ini), lalu filter di
+      // client pakai belongsToStore (storeId ATAU bagId cocok daftar menu
+      // toko ini).
       const ordersQ = query(
         collection(db, 'orders'),
-        where('storeId', '==', uid),
         orderBy('createdAt', 'desc'),
-        limit(20)
+        limit(50)
       );
 
       onSnapshot(ordersQ, (snapshot) => {
@@ -211,16 +281,45 @@
         let recentHtml = '';
         let shown = 0;
 
+        // Omzet 7 hari terakhir (Senin–Minggu minggu berjalan), buat chart.
+        // Key-nya 'YYYY-MM-DD' format lokal, diisi 0 dulu biar hari tanpa
+        // transaksi tetap muncul sebagai titik 0, bukan hilang dari chart.
+        const dayKeys = [];
+        const dayLabels = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+        const revenueByDay = {};
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date();
+          d.setHours(0, 0, 0, 0);
+          d.setDate(d.getDate() - i);
+          const key = d.toISOString().slice(0, 10);
+          dayKeys.push(key);
+          revenueByDay[key] = 0;
+        }
+
         snapshot.forEach(docSnap => {
-          const d = docSnap.data();
+          const raw = docSnap.data();
+
+          // Sama seperti orders.html: order ini punya toko ini kalau
+          // storeId-nya cocok, ATAU (untuk order lama tanpa storeId)
+          // bagId-nya ada di daftar menu toko ini.
+          const belongsToStore = raw.storeId === uid || (!!raw.bagId && myBagIds.has(raw.bagId));
+          if (!belongsToStore) return;
+
+          const d = normalizeOrder(raw);
           const createdDate = d.createdAt?.toDate ? d.createdAt.toDate() : null;
           const isToday = createdDate && createdDate >= today;
 
           if (isToday) {
             todayCount++;
-            menuSold += Number(d.qty || 1);
-            if (d.status === 'completed') revenue += Number(d.totalPrice || 0);
+            menuSold += d.qty;
+            if (d.status === 'completed') revenue += d.totalPrice;
             if (d.status === 'pending') pendingCount++;
+          }
+
+          // Akumulasi omzet harian buat chart (7 hari terakhir, status completed saja)
+          if (d.status === 'completed' && createdDate) {
+            const key = createdDate.toISOString().slice(0, 10);
+            if (key in revenueByDay) revenueByDay[key] += d.totalPrice;
           }
 
           // Recent orders list (max 5)
@@ -229,8 +328,8 @@
               <div class="d-flex align-items-center mb-3 pb-3 border-bottom">
                 <div class="me-3">${statusIcon[d.status] || statusIcon.pending}</div>
                 <div class="flex-grow-1" style="min-width:0">
-                  <div class="fw-bold text-truncate">${d.itemName || 'Pesanan'}</div>
-                  <div class="text-muted small">Rp ${Number(d.totalPrice||0).toLocaleString('id-ID')} • ${d.buyerName || '-'}</div>
+                  <div class="fw-bold text-truncate">${d.itemName}</div>
+                  <div class="text-muted small">Rp ${d.totalPrice.toLocaleString('id-ID')} • ${d.buyerName}</div>
                 </div>
                 <div class="ms-2 text-end flex-shrink-0">
                   <div class="text-muted small mb-1">${timeAgo(d.createdAt)}</div>
@@ -262,6 +361,11 @@
         // Update recent orders
         document.getElementById('recentOrdersList').innerHTML =
           recentHtml || '<p class="text-muted text-center small">Belum ada pesanan hari ini.</p>';
+
+        // Render chart omzet 7 hari terakhir dari data ASLI (bukan dummy)
+        const chartLabels = dayKeys.map(k => dayLabels[new Date(k + 'T00:00:00').getDay()]);
+        const chartData = dayKeys.map(k => revenueByDay[k]);
+        renderRevenueChart(chartLabels, chartData);
       });
 
       // ── Menu count (active menus) ───────────────────────────────────────────

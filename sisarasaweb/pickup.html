@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Konfirmasi Pickup | Sisarasa</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(160deg, #16a34a 0%, #15803d 100%);
+    }
+    .card {
+      background: #fff;
+      border-radius: 24px;
+      padding: 40px 28px;
+      max-width: 380px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+    }
+    .icon-wrap {
+      width: 88px; height: 88px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 42px;
+    }
+    .icon-wrap.success { background: #dcfce7; color: #16a34a; }
+    .icon-wrap.error   { background: #fee2e2; color: #dc2626; }
+    .icon-wrap.loading { background: #f1f5f9; color: #64748b; }
+    h1 { font-size: 1.3rem; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
+    p.desc { color: #64748b; font-size: 0.95rem; line-height: 1.5; margin-bottom: 20px; }
+    .order-box {
+      background: #f8fafc;
+      border-radius: 14px;
+      padding: 16px;
+      text-align: left;
+      margin-top: 4px;
+    }
+    .order-row { display: flex; justify-content: space-between; font-size: 0.88rem; padding: 4px 0; color: #334155; }
+    .order-row span:first-child { color: #94a3b8; }
+    .order-row span:last-child { font-weight: 600; }
+    .brand { margin-top: 24px; font-size: 0.78rem; color: #94a3b8; }
+    .brand i { color: #16a34a; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 4px solid #e2e8f0;
+      border-top-color: #16a34a;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div class="card" id="card">
+    <div class="icon-wrap loading" id="iconWrap">
+      <div class="spinner"></div>
+    </div>
+    <h1 id="title">Memproses...</h1>
+    <p class="desc" id="desc">Sedang memverifikasi kode pickup, tunggu sebentar.</p>
+    <div id="orderBox"></div>
+  </div>
+
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const iconWrap = document.getElementById('iconWrap');
+    const titleEl = document.getElementById('title');
+    const descEl = document.getElementById('desc');
+    const orderBox = document.getElementById('orderBox');
+
+    function showResult(type, title, desc, order) {
+      iconWrap.className = 'icon-wrap ' + type;
+      iconWrap.innerHTML = type === 'success'
+        ? '<i class="fa-solid fa-check"></i>'
+        : '<i class="fa-solid fa-xmark"></i>';
+      titleEl.textContent = title;
+      descEl.textContent = desc;
+
+      if (order) {
+        orderBox.innerHTML = `
+          <div class="order-box">
+            <div class="order-row"><span>Toko</span><span>${order.tokoNama ?? '-'}</span></div>
+            ${order.namaMenu ? `<div class="order-row"><span>Menu</span><span>${order.namaMenu}</span></div>` : ''}
+            <div class="order-row"><span>Kode</span><span>${order.kodePickup ?? '-'}</span></div>
+            <div class="order-row"><span>Total</span><span>Rp ${Number(order.harga ?? 0).toLocaleString('id-ID')}</span></div>
+          </div>
+        `;
+      }
+    }
+
+    async function processPickup() {
+      const params = new URLSearchParams(window.location.search);
+      const orderId = params.get('oid');
+      const kode = params.get('kode');
+
+      if (!orderId || !kode) {
+        showResult('error', 'Link Tidak Valid', 'QR ini bukan kode pickup Sisarasa yang sah.');
+        return;
+      }
+
+      try {
+        const orderRef = doc(db, 'orders', orderId);
+        const snap = await getDoc(orderRef);
+
+        if (!snap.exists()) {
+          showResult('error', 'Pesanan Tidak Ditemukan', 'Pesanan ini mungkin sudah dihapus.');
+          return;
+        }
+
+        const order = snap.data();
+
+        // Double-check kode di URL cocok sama kodePickup tersimpan —
+        // jaga-jaga kalau orderId ke-tebak tapi kode-nya beda.
+        if (order.kodePickup !== kode) {
+          showResult('error', 'Kode Tidak Cocok', 'Kode pickup tidak sesuai dengan pesanan ini.');
+          return;
+        }
+
+        // Dicek dua-duanya: 'completed'/'cancelled' (standar baru, dipakai
+        // admin web) dan 'selesai'/'batal' (kemungkinan masih ada di order
+        // lama sebelum standar disatukan).
+        if (order.status === 'completed' || order.status === 'selesai') {
+          showResult('success', 'Sudah Diambil Sebelumnya', 'Pesanan ini sudah ditandai selesai.', order);
+          return;
+        }
+
+        if (order.status === 'cancelled' || order.status === 'batal') {
+          showResult('error', 'Pesanan Dibatalkan', 'Pesanan ini sudah dibatalkan, tidak bisa diambil.', order);
+          return;
+        }
+
+        if (order.status !== 'confirmed') {
+          showResult('error', 'Belum Dikonfirmasi', 'Admin toko belum mengkonfirmasi pesanan ini.', order);
+          return;
+        }
+
+        await updateDoc(orderRef, { status: 'completed' });
+        showResult('success', 'Pesanan Berhasil Diambil!', 'Status pesanan sudah ditandai selesai.', { ...order, status: 'completed' });
+      } catch (err) {
+        console.error(err);
+        showResult('error', 'Gagal Memproses', 'Terjadi kesalahan, coba scan ulang.');
+      }
+    }
+
+    processPickup();
+  </script>
+
+  <div style="position: fixed; bottom: 18px; left: 0; right: 0; text-align: center;">
+    <span class="brand"><i class="fa-solid fa-leaf"></i> Sisarasa</span>
+  </div>
+
+</body>
+</html>

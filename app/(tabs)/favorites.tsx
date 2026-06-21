@@ -1,12 +1,12 @@
 import { useRouter } from 'expo-router';
-import { onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { onSnapshot, query, orderBy, where, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
+import { FlatList, Image, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { auth } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import { favoritesCollection, removeFavorite } from '../lib/favorites';
 import { COLORS } from '@/constants/theme';
 
@@ -18,6 +18,7 @@ interface FavoriteItem {
   harga: number;
   hargaAsli: number;
   emoji: string;
+  imageUrl?: string;
   jamPickup?: string;
   alamat?: string;
 }
@@ -66,13 +67,46 @@ export default function FavoritesScreen() {
     await removeFavorite(userId, bagId);
   };
 
-  const renderItem = ({ item }: { item: FavoriteItem }) => (
+  // Fallback gambar: dokumen favorites itu snapshot data pas di-fav, jadi
+  // kalau toko baru UPLOAD/UPDATE foto SETELAH user nge-fav, favorit lama
+  // tetap kesimpen dengan imageUrl kosong. Daripada nulis ulang ke
+  // favorites (yang bisa nimpa data lain), kita fetch imageUrl terbaru
+  // dari magic_bags cuma buat item yang kosong, sekali per bagId, dan
+  // simpan di cache lokal terpisah supaya gak fetch berulang tiap render.
+  const [fallbackImages, setFallbackImages] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const missing = favorites.filter((f) => !f.imageUrl && !(f.bagId in fallbackImages));
+    if (missing.length === 0) return;
+
+    missing.forEach(async (item) => {
+      try {
+        const snap = await getDoc(doc(db, 'magic_bags', item.bagId));
+        if (snap.exists()) {
+          const url = (snap.data() as { imageUrl?: string }).imageUrl;
+          if (url) {
+            setFallbackImages((prev) => ({ ...prev, [item.bagId]: url }));
+          }
+        }
+      } catch {
+        // Toko/menu mungkin udah dihapus — biarin fallback ke emoji aja, gapapa.
+      }
+    });
+  }, [favorites, fallbackImages]);
+
+  const renderItem = ({ item }: { item: FavoriteItem }) => {
+    const imageUrl = item.imageUrl || fallbackImages[item.bagId];
+    return (
     <Pressable
       style={[styles.card, { backgroundColor: isDark ? COLORS.gray800 : COLORS.white }]}
       onPress={() => router.push({ pathname: '/detail', params: { id: item.bagId } })}
     >
       <View style={styles.cardEmoji}>
-        <ThemedText style={styles.emoji}>{item.emoji || '🛍️'}</ThemedText>
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.cardImage} resizeMode="cover" />
+        ) : (
+          <ThemedText style={styles.emoji}>{item.emoji || '🛍️'}</ThemedText>
+        )}
       </View>
       <View style={{ flex: 1 }}>
         <ThemedText style={styles.tokoName}>{item.tokoNama}</ThemedText>
@@ -93,7 +127,8 @@ export default function FavoritesScreen() {
         <Ionicons name="heart" size={22} color={COLORS.danger} />
       </Pressable>
     </Pressable>
-  );
+    );
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -129,7 +164,8 @@ const styles = StyleSheet.create({
   header: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 20 },
   headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
   card: { flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: 14, marginBottom: 12, elevation: 2 },
-  cardEmoji: { width: 50, height: 50, borderRadius: 12, backgroundColor: COLORS.primaryLight, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  cardEmoji: { width: 50, height: 50, borderRadius: 12, backgroundColor: COLORS.primaryLight, justifyContent: 'center', alignItems: 'center', marginRight: 12, overflow: 'hidden' },
+  cardImage: { width: '100%', height: '100%' },
   emoji: { fontSize: 24 },
   tokoName: { fontSize: 15, fontWeight: '700' },
   kategori: { fontSize: 12, color: COLORS.gray400, marginTop: 2 },

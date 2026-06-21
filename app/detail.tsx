@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Pressable, useColorScheme, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc, collection, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, collection, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { ThemedText } from '@/components/themed-text';
@@ -12,6 +12,7 @@ import { COLORS } from '@/constants/theme';
 
 interface MagicBag {
   id: string;
+  storeId: string;
   tokoNama: string;
   namaMenu?: string;
   kategori: string;
@@ -99,6 +100,7 @@ export default function DetailScreen() {
           harga: bag.harga,
           hargaAsli: bag.hargaAsli,
           emoji: bag.emoji,
+          imageUrl: bag.imageUrl,
           jamPickup: bag.jamPickup,
           alamat: bag.alamat,
         });
@@ -112,6 +114,15 @@ export default function DetailScreen() {
   const handleOrder = async () => {
     if (!bag || !auth.currentUser) return;
     if (ordering) return; // cegah double-tap memicu dua transaksi sekaligus
+
+    // Bag lama (dari seed data demo) mungkin gak punya storeId. Tanpa ini,
+    // order-nya tetap kebuat tapi gak akan pernah muncul di dashboard toko
+    // manapun karena dashboard query-nya where('storeId','==', uid).
+    if (!bag.storeId) {
+      Alert.alert('Tidak bisa checkout', 'Data toko untuk Magic Bag ini tidak lengkap (storeId kosong). Coba Magic Bag lain.');
+      return;
+    }
+
     setOrdering(true);
     await new Promise((r) => setTimeout(r, 2000));
 
@@ -137,6 +148,7 @@ export default function DetailScreen() {
         tx.set(orderRef, {
           userId: auth.currentUser!.uid,
           userEmail: auth.currentUser!.email,
+          storeId: bag.storeId,
           bagId: bag.id,
           tokoNama: bag.tokoNama,
           namaMenu: bag.namaMenu || bag.tokoNama,
@@ -146,16 +158,21 @@ export default function DetailScreen() {
           jumlah,
           status: 'pending',
           kodePickup: kode,
-          createdAt: Date.now(),
+          // serverTimestamp() (bukan Date.now()) supaya hasilnya Firestore
+          // Timestamp object — dashboard & orders.html manggil .toDate() ke
+          // field ini buat hitung omzet harian; kalau cuma number biasa,
+          // .toDate() bakal undefined dan order ini gak pernah kehitung
+          // di statistik manapun walau statusnya udah completed.
+          createdAt: serverTimestamp(),
         });
         tx.update(bagRef, { stok: stokSekarang - jumlah });
       });
 
       setOrdering(false);
       Alert.alert(
-        '✅ Pembayaran Berhasil!',
+        '✅ Pesanan Berhasil!',
         `Kode pickup kamu: ${kode}\n\nLihat di tab Pesanan untuk QR Code.`,
-        [{ text: 'Lihat Pesanan', onPress: () => router.replace('/(tabs)/toko') }]
+        [{ text: 'Lihat Pesanan', onPress: () => router.replace('/(tabs)/orders') }]
       );
     } catch (err) {
       setOrdering(false);
