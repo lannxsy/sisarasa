@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   hero: { height: 180, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   heroImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
-  heroEmoji: { fontSize: 64 },
+  heroEmoji: { fontSize: 64, lineHeight: 76 },
   backBtn: {
     position: 'absolute', top: 52, left: 16,
     backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 8,

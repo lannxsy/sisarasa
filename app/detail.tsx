@@ -170,8 +170,8 @@ export default function DetailScreen() {
 
       setOrdering(false);
       Alert.alert(
-        '✅ Pesanan Berhasil!',
-        `Kode pickup kamu: ${kode}\n\nLihat di tab Pesanan untuk QR Code.`,
+        '✅ Pesanan Berhasil Dibuat!',
+        `Kode pickup kamu: ${kode}\n\nBayar langsung di toko saat pengambilan. Lihat di tab Pesanan untuk QR Code.`,
         [{ text: 'Lihat Pesanan', onPress: () => router.replace('/(tabs)/orders') }]
       );
     } catch (err) {
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   heroImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
   backBtn: { position: 'absolute', top: 52, left: 16, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 8 },
   favBtn: { position: 'absolute', top: 52, right: 16, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 8 },
-  heroEmoji: { fontSize: 72 },
+  heroEmoji: { fontSize: 72, lineHeight: 86 },
   diskonBadge: { position: 'absolute', top: 98, right: 16, backgroundColor: COLORS.secondary, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
   diskonText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   content: { padding: 18 },

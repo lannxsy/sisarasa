@@ -117,7 +117,7 @@
   <script type="module">
     import { db } from './assets/js/firebase-config.js';
     import {
-      collection, doc, query, orderBy, onSnapshot, updateDoc, where, getDocs, deleteDoc
+      collection, doc, query, orderBy, onSnapshot, updateDoc, where, getDocs, deleteDoc, runTransaction
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     let uid = localStorage.getItem('userUid');
@@ -285,7 +285,39 @@
     document.getElementById('confirmDeleteOrderBtn').addEventListener('click', async () => {
       if (!orderToDelete) return;
       try {
-        await deleteDoc(doc(db, 'orders', orderToDelete));
+        const raw = ordersCache[orderToDelete];
+        // Stok dikembalikan HANYA kalau order yang dihapus belum 'completed'
+        // (masih pending/confirmed, atau sudah cancelled). Kalau sudah
+        // completed, barangnya memang sudah benar-benar diambil pembeli,
+        // jadi stok TIDAK boleh ditambah lagi — itu kebalikannya, dobel
+        // tambah stok buat barang yang udah keluar dari toko.
+        const isCompleted = raw?.status === 'completed' || raw?.status === 'selesai';
+        const bagId = raw?.bagId;
+        const qty = Number(raw?.qty ?? raw?.jumlah ?? 1);
+
+        if (!isCompleted && bagId) {
+          // runTransaction: hapus order DAN kembalikan stok dalam satu
+          // operasi atomik. Kalau salah satu gagal, dua-duanya batal —
+          // gak akan ada kondisi order kehapus tapi stok gak balik, atau
+          // sebaliknya.
+          await runTransaction(db, async (tx) => {
+            const bagRef = doc(db, 'magic_bags', bagId);
+            const bagSnap = await tx.get(bagRef);
+            const orderRef = doc(db, 'orders', orderToDelete);
+
+            if (bagSnap.exists()) {
+              const stokSekarang = Number(bagSnap.data().stok ?? 0);
+              tx.update(bagRef, { stok: stokSekarang + qty });
+            }
+            // Kalau bagSnap gak exists (menu udah dihapus duluan), stok
+            // gak perlu dibalikin — cuma hapus order-nya aja.
+            tx.delete(orderRef);
+          });
+        } else {
+          // Order completed (atau gak punya bagId) — hapus biasa, tanpa restore stok.
+          await deleteDoc(doc(db, 'orders', orderToDelete));
+        }
+
         bootstrap.Modal.getInstance(document.getElementById('deleteOrderModal')).hide();
         orderToDelete = null;
       } catch (err) {

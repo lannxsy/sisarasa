@@ -186,7 +186,7 @@ export default function TokoScreen() {
         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : filtered.length === 0 ? (
         <View style={styles.empty}>
-          <ThemedText style={{ fontSize: 48 }}>🔍</ThemedText>
+          <ThemedText style={{ fontSize: 48, lineHeight: 58 }}>🔍</ThemedText>
           <ThemedText style={styles.emptyText}>Toko tidak ditemukan</ThemedText>
         </View>
       ) : (

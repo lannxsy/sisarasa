@@ -138,12 +138,12 @@ export default function FavoritesScreen() {
 
       {!authReady ? null : !userId ? (
         <View style={styles.empty}>
-          <ThemedText style={{ fontSize: 48 }}>🔒</ThemedText>
+          <ThemedText style={{ fontSize: 48, lineHeight: 58 }}>🔒</ThemedText>
           <ThemedText style={styles.emptyText}>Masuk dulu untuk lihat favorit kamu</ThemedText>
         </View>
       ) : loading ? null : favorites.length === 0 ? (
         <View style={styles.empty}>
-          <ThemedText style={{ fontSize: 48 }}>🤍</ThemedText>
+          <ThemedText style={{ fontSize: 48, lineHeight: 58 }}>🤍</ThemedText>
           <ThemedText style={styles.emptyText}>Belum ada toko favorit</ThemedText>
           <ThemedText style={styles.emptySub}>Tap ikon hati di Magic Bag yang kamu suka</ThemedText>
         </View>

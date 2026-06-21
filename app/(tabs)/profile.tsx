@@ -52,7 +52,6 @@ export default function ProfileScreen() {
 
       {/* Menu */}
       <View style={styles.menuSection}>
-        <MenuItem icon="notifications-outline" label="Notifikasi" onPress={() => Alert.alert('Info', 'Fitur segera hadir!')} />
         <MenuItem icon="information-circle-outline" label="Tentang SisaRasa" onPress={() => Alert.alert('SisaRasa', 'Aplikasi penyelamat makanan berlebih. Versi 1.0.0')} />
         <MenuItem icon="log-out-outline" label="Keluar" onPress={handleLogout} danger />
       </View>

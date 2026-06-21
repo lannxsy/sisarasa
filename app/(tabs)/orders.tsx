@@ -3,7 +3,7 @@ import {
   View, FlatList, StyleSheet, useColorScheme,
   Pressable, Modal, ActivityIndicator, Linking, Image,
 } from 'react-native';
-import { collection, onSnapshot, query, orderBy, where, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { ThemedText } from '@/components/themed-text';
@@ -17,12 +17,29 @@ interface Order {
   namaMenu?: string;
   imageUrl?: string;
   harga: number;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
-  createdAt: number;
+  // Termasuk 'selesai'/'batal' (skema lama, Bahasa Indonesia) karena order
+  // yang dibuat SEBELUM standar disatukan ke 'completed'/'cancelled' masih
+  // bisa ada di Firestore. UI sengaja cek dua-duanya (lihat badge di bawah).
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'selesai' | 'batal';
+  // Order baru: Firestore Timestamp (dari serverTimestamp()).
+  // Order lama (sebelum diperbaiki): number biasa (dari Date.now()).
+  // Keduanya bisa muncul, makanya helper toDate() di bawah cek dua-duanya.
+  createdAt: Timestamp | number;
   kodePickup: string;
   emoji: string;
   jumlah: number;
   bagId?: string;
+}
+
+// serverTimestamp() menulis Firestore Timestamp object (punya .toDate()),
+// sedangkan order lama nulis Date.now() (number biasa). new Date(timestamp)
+// langsung gagal jadi "Invalid Date" kalau dikasih Timestamp object — jadi
+// semua pembacaan createdAt WAJIB lewat helper ini, jangan new Date() langsung.
+function toDate(value: Timestamp | number | null | undefined): Date | null {
+  if (!value) return null;
+  if (typeof value === 'number') return new Date(value);
+  if (typeof (value as Timestamp).toDate === 'function') return (value as Timestamp).toDate();
+  return null;
 }
 
 interface StoreLocation {
@@ -116,7 +133,7 @@ export default function OrdersScreen() {
             {item.jumlah}x Magic Bag • Rp {item.harga.toLocaleString('id-ID')}
           </ThemedText>
           <ThemedText style={styles.sub}>
-            {new Date(item.createdAt).toLocaleString('id-ID')}
+            {toDate(item.createdAt)?.toLocaleString('id-ID') ?? '-'}
           </ThemedText>
         </View>
         <View style={[styles.badge, { backgroundColor: st.color + '22' }]}>
@@ -136,7 +153,7 @@ export default function OrdersScreen() {
         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : orders.length === 0 ? (
         <View style={styles.empty}>
-          <ThemedText style={{ fontSize: 48 }}>🛒</ThemedText>
+          <ThemedText style={{ fontSize: 48, lineHeight: 58 }}>🛒</ThemedText>
           <ThemedText style={styles.emptyText}>Belum ada pesanan</ThemedText>
           <ThemedText style={styles.emptySubText}>Pesan Magic Bag di tab Toko!</ThemedText>
         </View>
@@ -187,14 +204,33 @@ export default function OrdersScreen() {
               <ThemedText style={styles.kodeText}>{qrModal?.kodePickup}</ThemedText>
             </View>
 
-            {/* Status pembayaran */}
+            {/* Status pembayaran — pembeli bayar CASH di toko pas ambil
+                pesanan, jadi badge "Pembayaran Berhasil" baru muncul
+                SETELAH status jadi completed (abis di-scan mitra), bukan
+                dari awal checkout. */}
             <View style={styles.successRow}>
-              <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
-              <ThemedText style={styles.successText}>Pembayaran Berhasil</ThemedText>
+              {(qrModal?.status === 'completed' || qrModal?.status === 'selesai') ? (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
+                  <ThemedText style={styles.successText}>Pembayaran Berhasil</ThemedText>
+                </>
+              ) : (qrModal?.status === 'cancelled' || qrModal?.status === 'batal') ? (
+                <>
+                  <Ionicons name="close-circle" size={20} color={COLORS.danger} />
+                  <ThemedText style={[styles.successText, { color: COLORS.danger }]}>Pesanan Dibatalkan</ThemedText>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="time-outline" size={20} color="#f59e0b" />
+                  <ThemedText style={[styles.successText, { color: '#f59e0b' }]}>Menunggu Diambil</ThemedText>
+                </>
+              )}
             </View>
 
             <ThemedText style={styles.modalHint}>
-              Tunjukkan kode ini ke toko saat mengambil pesanan
+              {(qrModal?.status === 'completed' || qrModal?.status === 'selesai')
+                ? 'Pesanan ini sudah diambil dan dibayar di toko.'
+                : 'Tunjukkan kode ini ke toko & bayar di tempat saat mengambil pesanan'}
             </ThemedText>
 
             {/* Info pesanan */}
@@ -216,7 +252,7 @@ export default function OrdersScreen() {
               <View style={styles.infoRow}>
                 <ThemedText style={styles.infoLabel}>Tanggal</ThemedText>
                 <ThemedText style={styles.infoValue}>
-                  {qrModal ? new Date(qrModal.createdAt).toLocaleDateString('id-ID') : ''}
+                  {qrModal ? (toDate(qrModal.createdAt)?.toLocaleDateString('id-ID') ?? '-') : ''}
                 </ThemedText>
               </View>
             </View>
@@ -291,6 +327,7 @@ const styles = StyleSheet.create({
   modal: {
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: 24, paddingBottom: 40, alignItems: 'center',
+    width: '100%',
   },
   handleBar: {
     width: 40, height: 4, borderRadius: 2,
