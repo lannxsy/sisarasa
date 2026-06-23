@@ -7,7 +7,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { addNotificationTapListener, getLastNotificationResponse } from './lib/notifications';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  // Layar pertama yang dibuka tiap kali app dijalankan dari awal adalah
+  // intro-map (full map tanpa tab bar), BUKAN langsung ke tab Toko.
+  // Ini yang bikin flow-nya: buka app -> full map -> cari lokasi -> render
+  // toko terdekat -> baru pindah ke tab bar (Toko/Pesanan/Favorit/Profil).
+  anchor: 'intro-map',
 };
 
 export default function RootLayout() {
@@ -39,6 +43,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
+        <Stack.Screen name="intro-map" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="register" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

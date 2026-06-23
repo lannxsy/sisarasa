@@ -41,7 +41,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) router.replace('/(tabs)');
+      if (user) router.replace('/intro-map');
     });
     return unsubscribe;
   }, [router]);
@@ -55,7 +55,7 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, normalizedEmail, password);
-      router.replace('/(tabs)');
+      router.replace('/intro-map');
     } catch (e: any) {
       const code = typeof e?.code === 'string' ? e.code : '';
 

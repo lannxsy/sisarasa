@@ -39,7 +39,7 @@ export default function RegisterScreen() {
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) router.replace('/(tabs)');
+      if (user) router.replace('/intro-map');
     });
     return unsubscribe;
   }, [router]);
@@ -58,7 +58,7 @@ export default function RegisterScreen() {
     setIsLoading(true);
     try {
       await createUserWithEmailAndPassword(auth, normalizedEmail, password);
-      router.replace('/(tabs)');
+      router.replace('/intro-map');
     } catch (e: any) {
       const code = typeof e?.code === 'string' ? e.code : '';
 

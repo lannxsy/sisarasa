@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import * as Location from 'expo-location';
 import React, { useEffect, useRef, useState } from 'react';
@@ -9,7 +9,7 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { db } from '../lib/firebase';
+import { auth, db } from './lib/firebase';
 import { COLORS } from '@/constants/theme';
 
 interface MagicBag {
@@ -45,16 +45,8 @@ function buatHTMLPeta(bags: MagicBag[], userLat: number, userLng: number) {
           iconSize: [26, 26],
           iconAnchor: [13, 13],
         })
-      }).addTo(map).on('click', function() {
-        // Tap pin di peta -> ke halaman TOKO (semua menu toko itu),
-        // bukan langsung ke 1 Magic Bag spesifik. Kirim storeId (dan
-        // bagId sebagai fallback kalau storeId kosong di data lama).
-        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'PIN',
-          bagId: ${JSON.stringify(b.id)},
-          storeId: ${JSON.stringify(b.storeId || '')}
-        }));
-      });
+      }).addTo(map);
+      // Markers hanya untuk dilihat, tidak bisa di-klik
     `
     )
     .join('\n');
@@ -103,38 +95,75 @@ function buatHTMLPeta(bags: MagicBag[], userLat: number, userLng: number) {
   `;
 }
 
-export default function HomeScreen() {
+// Layar pertama yang dilihat user tiap kali app dibuka (sebelum masuk ke
+// tab Toko/Pesanan/Favorit/Profil). Tampilannya FULL MAP tanpa tab bar,
+// mirip flow Too Good To Go: user pencet "Di mana kamu?" -> lokasi dicari
+// -> toko terdekat di-render di map -> baru lanjut ke tab bar.
+//
+// Layar ini TIDAK ada di tab bar dan tidak bisa diakses lagi setelah lanjut
+// ke tabs, kecuali user tutup-buka app dari awal (sesuai permintaan: untuk
+// liat map lagi, app harus di-restart).
+export default function IntroMapScreen() {
   const router = useRouter();
   const webviewRef = useRef<WebView>(null);
   const [bags, setBags] = useState<MagicBag[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingToko, setLoadingToko] = useState(true);
   const [userLat, setUserLat] = useState(0);
   const [userLng, setUserLng] = useState(0);
   const [locating, setLocating] = useState(false);
+  // Tahap 1 selesai begitu lokasi user ketemu -> tombol berubah jadi
+  // tombol tahap 2 ("Cari toko terdekat").
+  const [lokasiKetemu, setLokasiKetemu] = useState(false);
+  // Tahap 2: render ulang map fokus ke toko-toko terdekat. Loading KE-2
+  // yang muncul setelah tombol "Cari toko terdekat" dipencet.
+  const [renderingToko, setRenderingToko] = useState(false);
+
+  // Auth gate: layar ini jadi entry point app, jadi dia yang nentuin
+  // apakah user lanjut liat map atau diarahkan ke /login dulu.
+  const [authReady, setAuthReady] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setIsLoggedIn(Boolean(user));
+      setAuthReady(true);
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db, 'magic_bags'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<MagicBag, 'id'>) }));
       setBags(data);
-      setLoading(false);
+      setLoadingToko(false);
     });
     return unsub;
   }, []);
 
   const cariLokasiku = async () => {
-    setLocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setUserLat(loc.coords.latitude);
-      setUserLng(loc.coords.longitude);
-      webviewRef.current?.injectJavaScript(
-        `window.recenterMap && window.recenterMap(${loc.coords.latitude}, ${loc.coords.longitude}); true;`
-      );
-    } finally {
-      setLocating(false);
+    if (!lokasiKetemu) {
+      // TAHAP 1: Ambil lokasi user
+      setLocating(true);
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setUserLat(loc.coords.latitude);
+        setUserLng(loc.coords.longitude);
+        webviewRef.current?.injectJavaScript(
+          `window.recenterMap && window.recenterMap(${loc.coords.latitude}, ${loc.coords.longitude}); true;`
+        );
+        setLokasiKetemu(true);
+      } finally {
+        setLocating(false);
+      }
+    } else {
+      // TAHAP 2: Cari toko terdekat dan lanjut ke tab
+      setRenderingToko(true);
+      setTimeout(() => {
+        router.replace('/(tabs)/toko');
+      }, 1200);
     }
   };
 
@@ -146,11 +175,8 @@ export default function HomeScreen() {
       const payload = JSON.parse(event.nativeEvent.data);
       if (payload?.type === 'PIN') {
         if (payload.storeId) {
-          // Pencet titik di peta -> ke halaman TOKO (semua menu toko itu),
-          // bukan langsung ke 1 Magic Bag spesifik.
           router.push({ pathname: '/toko-detail', params: { storeId: payload.storeId } });
         } else if (payload.bagId) {
-          // Fallback untuk data lama yang belum punya storeId di magic_bags.
           router.push({ pathname: '/detail', params: { id: payload.bagId } });
         }
       }
@@ -159,9 +185,14 @@ export default function HomeScreen() {
     }
   };
 
+  // Tunggu status auth siap dulu sebelum render apa pun, supaya gak ada
+  // "kedip" map sebelum ke-redirect ke /login.
+  if (!authReady) return null;
+  if (!isLoggedIn) return <Redirect href="/login" />;
+
   return (
     <ThemedView style={styles.container}>
-      {loading ? (
+      {loadingToko ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
@@ -175,16 +206,37 @@ export default function HomeScreen() {
         />
       )}
 
-      <View style={styles.bottomWrap}>
-        <Pressable style={styles.locateBtn} onPress={cariLokasiku} disabled={locating}>
-          {locating ? (
-            <ActivityIndicator size="small" color="#fff" />
+      {/* Overlay loading ke-2: muncul setelah lokasi ketemu, sebelum pindah ke tab bar */}
+      {renderingToko && (
+        <View style={styles.renderOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <ThemedText style={styles.renderOverlayText}>Mencari toko terdekat...</ThemedText>
+        </View>
+      )}
+
+      {!renderingToko && (
+        <View style={styles.bottomWrap}>
+          {!lokasiKetemu ? (
+            <Pressable style={styles.locateBtn} onPress={cariLokasiku} disabled={locating}>
+              {locating ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="navigate" size={16} color="#fff" />
+              )}
+              <ThemedText style={styles.locateBtnText}>Lokasi Saya</ThemedText>
+            </Pressable>
           ) : (
-            <Ionicons name="navigate" size={16} color="#fff" />
+            <Pressable style={styles.locateBtn} onPress={cariLokasiku} disabled={renderingToko}>
+              {renderingToko ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="location" size={16} color="#fff" />
+              )}
+              <ThemedText style={styles.locateBtnText}>Cari Toko Terdekat</ThemedText>
+            </Pressable>
           )}
-          <ThemedText style={styles.locateBtnText}>Di mana kamu?</ThemedText>
-        </Pressable>
-      </View>
+        </View>
+      )}
     </ThemedView>
   );
 }
@@ -214,4 +266,16 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   locateBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  renderOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  renderOverlayText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });

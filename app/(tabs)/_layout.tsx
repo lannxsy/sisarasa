@@ -31,13 +31,6 @@ export default function TabLayout() {
         tabBarStyle: { paddingBottom: 4, height: 60 },
       }}>
       <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Beranda',
-          tabBarIcon: ({ color }) => <Ionicons size={24} name="home" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="toko"
         options={{
           title: 'Toko',

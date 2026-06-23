@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
+import * as Location from 'expo-location';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View, useColorScheme, Image,
@@ -9,6 +10,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { db } from '../lib/firebase';
 import { COLORS } from '@/constants/theme';
+import { hitungJarakKm, formatJarak } from '../lib/distance';
 
 interface MagicBag {
   id: string;
@@ -44,6 +46,7 @@ interface TokoGroup {
   lat?: number;
   lng?: number;
   storeExists?: boolean;
+  jarakKm: number | null;
 }
 
 export default function TokoScreen() {
@@ -52,6 +55,32 @@ export default function TokoScreen() {
   const [bags, setBags] = useState<MagicBag[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  // Lokasi user dipakai untuk menghitung & mengurutkan jarak tiap toko.
+  // Diambil otomatis begitu tab ini terbuka (izin lokasi sudah diminta
+  // sebelumnya di layar map intro, jadi biasanya langsung granted di sini).
+  const [userLat, setUserLat] = useState<number | null>(null);
+  const [userLng, setUserLng] = useState<number | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!isMounted) return;
+        setUserLat(loc.coords.latitude);
+        setUserLng(loc.coords.longitude);
+      } catch {
+        // Gagal ambil lokasi (GPS mati/izin ditolak) -> list tetap tampil,
+        // cuma tanpa info jarak & urutan default (terbaru).
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Cache dokumen stores/{storeId} → { imageUrl, address }. Dipakai untuk
   // menimpa foto & alamat hasil grouping dari magic_bags, supaya kartu
   // toko di list ini tampil foto TOKO (dari Pengaturan Toko), bukan foto
@@ -164,17 +193,41 @@ export default function TokoScreen() {
           lat: bag.lat,
           lng: bag.lng,
           storeExists,
+          jarakKm: null,
         });
       }
     }
     return Array.from(map.values());
   }, [bags, storeDocs]);
 
-  const filtered = tokoGroups.filter(
-    (t) =>
-      t.tokoNama.toLowerCase().includes(search.toLowerCase()) ||
-      t.kategoriList.some((k) => k.toLowerCase().includes(search.toLowerCase()))
-  );
+  // Hitung jarak tiap toko dari lokasi user (kalau lokasi & koordinat toko
+  // ada), lalu urutkan list dari yang TERDEKAT. Toko tanpa koordinat atau
+  // saat lokasi user belum tersedia diletakkan di paling bawah (bukan
+  // dihilangkan), supaya tetap bisa ditemukan lewat pencarian.
+  const tokoGroupsDenganJarak: TokoGroup[] = React.useMemo(() => {
+    if (userLat == null || userLng == null) return tokoGroups;
+    return tokoGroups.map((t) => ({
+      ...t,
+      jarakKm:
+        t.lat != null && t.lng != null
+          ? hitungJarakKm(userLat, userLng, t.lat, t.lng)
+          : null,
+    }));
+  }, [tokoGroups, userLat, userLng]);
+
+  const filtered = tokoGroupsDenganJarak
+    .filter(
+      (t) =>
+        (t.tokoNama.toLowerCase().includes(search.toLowerCase()) ||
+        t.kategoriList.some((k) => k.toLowerCase().includes(search.toLowerCase()))) &&
+        (t.jarakKm == null || t.jarakKm <= 5) // FILTER: hanya toko dalam radius 5km
+    )
+    .sort((a, b) => {
+      if (a.jarakKm == null && b.jarakKm == null) return 0;
+      if (a.jarakKm == null) return 1;
+      if (b.jarakKm == null) return -1;
+      return a.jarakKm - b.jarakKm;
+    });
 
   const renderItem = ({ item }: { item: TokoGroup }) => {
     // Toko tutup itu kondisi yang LEBIH dominan daripada stok habis — kalau
@@ -205,6 +258,13 @@ export default function TokoScreen() {
           <View style={styles.pickupRow}>
             <Ionicons name="time-outline" size={12} color={COLORS.gray400} />
             <ThemedText style={styles.pickupText}> {item.jamPickup}</ThemedText>
+            {item.jarakKm != null && (
+              <>
+                <ThemedText style={styles.dotSep}> · </ThemedText>
+                <Ionicons name="location-outline" size={12} color={COLORS.gray400} />
+                <ThemedText style={styles.pickupText}> {formatJarak(item.jarakKm)}</ThemedText>
+              </>
+            )}
           </View>
           {!item.tokoBuka ? (
             <ThemedText style={styles.habisText}>Toko Tutup</ThemedText>
@@ -294,6 +354,7 @@ const styles = StyleSheet.create({
   kategori: { fontSize: 11, color: COLORS.gray400, marginTop: 2 },
   pickupRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
   pickupText: { fontSize: 11, color: COLORS.gray400 },
+  dotSep: { fontSize: 11, color: COLORS.gray400 },
   hargaMulai: { fontSize: 13, fontWeight: '800', color: COLORS.primary, marginTop: 4 },
   habisText: { fontSize: 13, fontWeight: '800', color: COLORS.danger, marginTop: 4 },
   menuBadge: {
