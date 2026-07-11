@@ -136,6 +136,11 @@
         return;
       }
 
+      if (password.length < 6) {
+        alert("Kata sandi minimal 6 karakter.");
+        return;
+      }
+
       registerBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Mendaftarkan...';
       registerBtn.disabled = true;
 
@@ -162,7 +167,12 @@
         window.location.href = 'setup-toko.html';
       } catch (error) {
         console.error("Error signing up:", error);
-        alert("Gagal mendaftar: " + error.message);
+        let msg = 'Gagal mendaftar. Silakan coba lagi.';
+        if (error.code === 'auth/email-already-in-use') msg = 'Email ini sudah terdaftar. Silakan masuk atau gunakan email lain.';
+        else if (error.code === 'auth/invalid-email') msg = 'Format email tidak valid.';
+        else if (error.code === 'auth/weak-password') msg = 'Kata sandi terlalu lemah, minimal 6 karakter.';
+        else if (error.code === 'auth/network-request-failed') msg = 'Koneksi internet bermasalah. Periksa koneksi Anda dan coba lagi.';
+        alert(msg);
       } finally {
         registerBtn.innerHTML = 'Lanjutkan';
         registerBtn.disabled = false;

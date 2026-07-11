@@ -25,6 +25,20 @@ service cloud.firestore {
       // Hanya pemilik toko yang boleh update/delete tokonya sendiri
       allow update, delete: if isStoreOwner(uid);
 
+      // Pembeli (siapapun yang login) boleh update HANYA field agregat
+      // rating (`ratingAvg`, `ratingCount`), dipicu bareng runTransaction()
+      // pas submit review baru (lihat rule `reviews` di bawah) — supaya
+      // card toko di list bisa langsung nampilin rata-rata rating tanpa
+      // query semua dokumen reviews tiap buka list. Field toko lainnya
+      // (nama, alamat, dst) tetap terkunci — cuma mitra yang boleh ubah itu.
+      allow update: if request.auth != null
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingAvg', 'ratingCount'])
+                    && request.resource.data.ratingCount is int
+                    && request.resource.data.ratingCount >= 0
+                    && request.resource.data.ratingAvg is number
+                    && request.resource.data.ratingAvg >= 0
+                    && request.resource.data.ratingAvg <= 5;
+
       // ─── MENUS (subkoleksi) ──────────────────────────────────────
       // stores/{uid}/menus/{menuId}
       match /menus/{menuId} {
@@ -87,6 +101,41 @@ service cloud.firestore {
 
       // Delete: mitra bisa menghapus pesanan dari daftar Kelola Pesanan
       allow delete: if request.auth != null;
+    }
+
+    // ─── REVIEWS ────────────────────────────────────────────────────
+    // reviews/{orderId} — rating & komentar pembeli ke toko, SATU review
+    // per pesanan. Sengaja pakai orderId sebagai docId (bukan auto-id)
+    // supaya "1 order cuma bisa direview sekali" bisa ditegakkan LANGSUNG
+    // oleh security rules: percobaan submit kedua ke docId yang sama
+    // dianggap Firestore sebagai `update` (bukan `create` lagi, karena
+    // dokumennya udah ada) — dan rule `update` sengaja TIDAK dibuka di
+    // bawah, jadi otomatis ditolak tanpa perlu logic tambahan di app.
+    match /reviews/{orderId} {
+      // Semua yang login boleh baca (ditampilkan di toko-detail & dashboard mitra)
+      allow read: if request.auth != null;
+
+      // Cuma pembeli pemilik order itu sendiri yang boleh bikin review-nya,
+      // dan cuma kalau order itu memang miliknya, sudah 'completed'/'selesai',
+      // dan storeId di review harus sama persis dengan storeId di order asli
+      // (supaya rating gak bisa "ditembak" ke toko lain / dipalsukan).
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.userId
+                    && request.auth.uid == get(/databases/$(database)/documents/orders/$(orderId)).data.userId
+                    && request.resource.data.storeId == get(/databases/$(database)/documents/orders/$(orderId)).data.storeId
+                    && get(/databases/$(database)/documents/orders/$(orderId)).data.status in ['completed', 'selesai']
+                    && request.resource.data.rating is int
+                    && request.resource.data.rating >= 1
+                    && request.resource.data.rating <= 5
+                    && request.resource.data.comment is string
+                    && request.resource.data.comment.size() <= 500;
+
+      // Review sengaja TIDAK BOLEH diubah/dihapus siapapun (termasuk oleh
+      // pemiliknya sendiri) — jaga integritas rating, biar mitra gak bisa
+      // maksa pembeli ubah reviewnya, dan pembeli juga gak bisa "cuci"
+      // rating jelek berkali-kali. Kalau nanti mau dibuka buat edit,
+      // tinggal tambah rule `allow update` dengan syarat serupa `create`
+      // ditambah affectedKeys dibatasi ke ['rating', 'comment'].
     }
 
     // ─── MAGIC BAGS ─────────────────────────────────────────────────

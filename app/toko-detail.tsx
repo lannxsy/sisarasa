@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Pressable, StyleSheet, View, useColorScheme, Image,
@@ -36,6 +36,16 @@ interface StoreDoc {
   latitude?: number;
   longitude?: number;
   isActive?: boolean;
+  ratingAvg?: number;
+  ratingCount?: number;
+}
+
+interface Review {
+  id: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  createdAt: any;
 }
 
 function buatMiniMap(lat: number, lng: number, namaToKo: string, emoji: string) {
@@ -73,6 +83,7 @@ export default function TokoDetailScreen() {
   const isDark = useColorScheme() === 'dark';
   const [bags, setBags] = useState<MagicBag[]>([]);
   const [storeDoc, setStoreDoc] = useState<StoreDoc | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -85,6 +96,23 @@ export default function TokoDetailScreen() {
       setStoreDoc(snap.exists() ? (snap.data() as StoreDoc) : null);
     });
     return unsubStore;
+  }, [storeId]);
+
+  useEffect(() => {
+    if (!storeId) return;
+    // Ulasan pembeli buat toko ini, terbaru duluan. Rating rata-rata &
+    // jumlahnya sendiri sudah dicache di stores/{storeId}.ratingAvg /
+    // ratingCount (di-update otomatis tiap ada review baru — lihat
+    // lib/reviews.ts) jadi TIDAK dihitung ulang dari sini.
+    const q = query(
+      collection(db, 'reviews'),
+      where('storeId', '==', storeId),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setReviews(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Review, 'id'>) })));
+    });
+    return unsub;
   }, [storeId]);
 
   useEffect(() => {
@@ -193,6 +221,45 @@ export default function TokoDetailScreen() {
         renderItem={renderMenuItem}
         contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
+        ListFooterComponent={
+          <View style={styles.reviewSection}>
+            <ThemedText style={[styles.sectionLabel, { color: isDark ? '#fff' : COLORS.gray600 }]}>
+              Ulasan Pembeli ({reviews.length})
+            </ThemedText>
+
+            {reviews.length === 0 ? (
+              <ThemedText style={[styles.noReviewText, { color: isDark ? '#94a3b8' : COLORS.gray400 }]}>
+                Belum ada ulasan untuk toko ini.
+              </ThemedText>
+            ) : (
+              reviews.map((r) => (
+                <View
+                  key={r.id}
+                  style={[styles.reviewCard, { backgroundColor: isDark ? COLORS.gray800 : COLORS.white }]}
+                >
+                  <View style={styles.reviewHeaderRow}>
+                    <ThemedText style={styles.reviewUserName}>{r.userName || 'Pembeli'}</ThemedText>
+                    <View style={styles.reviewStars}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <Ionicons
+                          key={n}
+                          name={n <= r.rating ? 'star' : 'star-outline'}
+                          size={12}
+                          color="#f59e0b"
+                        />
+                      ))}
+                    </View>
+                  </View>
+                  {!!r.comment && (
+                    <ThemedText style={[styles.reviewComment, { color: isDark ? '#cbd5e1' : COLORS.gray600 }]}>
+                      {r.comment}
+                    </ThemedText>
+                  )}
+                </View>
+              ))
+            )}
+          </View>
+        }
         ListHeaderComponent={
           <>
             {/* Hero toko */}
@@ -211,6 +278,21 @@ export default function TokoDetailScreen() {
               <ThemedText style={[styles.tokoName, { color: isDark ? '#fff' : COLORS.dark }]}>
                 {toko.tokoNama}
               </ThemedText>
+
+              {/* Ringkasan rating — cuma tampil kalau toko sudah punya
+                  minimal 1 review (ratingCount > 0), biar toko baru yang
+                  belum ada ulasan sama sekali gak nampilin "0.0 ★ (0)". */}
+              {!!storeDoc?.ratingCount && (
+                <View style={styles.ratingSummaryRow}>
+                  <Ionicons name="star" size={15} color="#f59e0b" />
+                  <ThemedText style={styles.ratingSummaryText}>
+                    {(storeDoc.ratingAvg ?? 0).toFixed(1)}
+                  </ThemedText>
+                  <ThemedText style={[styles.ratingSummaryCount, { color: isDark ? '#94a3b8' : COLORS.gray400 }]}>
+                    ({storeDoc.ratingCount} ulasan)
+                  </ThemedText>
+                </View>
+              )}
 
               {!toko.tokoBuka && (
                 <View style={styles.closedBanner}>
@@ -271,6 +353,9 @@ const styles = StyleSheet.create({
   },
   tokoInfo: { paddingHorizontal: 18, paddingTop: 16 },
   tokoName: { fontSize: 20, fontWeight: '800', marginBottom: 12 },
+  ratingSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: -8, marginBottom: 12 },
+  ratingSummaryText: { fontSize: 13, fontWeight: '800' },
+  ratingSummaryCount: { fontSize: 12 },
   closedBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#fee2e2', borderRadius: 10,
@@ -313,4 +398,16 @@ const styles = StyleSheet.create({
   hargaAsli: { fontSize: 11, color: COLORS.gray400, textDecorationLine: 'line-through' },
   stokBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   stokText: { fontSize: 11, fontWeight: '700' },
+
+  reviewSection: { paddingHorizontal: 16, marginTop: 8 },
+  noReviewText: { fontSize: 13, marginTop: 4 },
+  reviewCard: {
+    borderRadius: 14, padding: 12, marginBottom: 8, elevation: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 3,
+  },
+  reviewHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  reviewUserName: { fontSize: 13, fontWeight: '700' },
+  reviewStars: { flexDirection: 'row', gap: 1 },
+  reviewComment: { fontSize: 12.5, lineHeight: 18 },
 });

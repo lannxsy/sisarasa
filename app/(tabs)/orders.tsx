@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, FlatList, StyleSheet, useColorScheme,
   Pressable, Modal, ActivityIndicator, Linking, Image, Alert,
-  ScrollView, Dimensions,
+  ScrollView, Dimensions, TextInput,
 } from 'react-native';
 import { collection, onSnapshot, query, orderBy, where, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { auth, db } from '../lib/firebase';
 import { registerForPushNotifications, scheduleLocalNotification } from '../lib/notifications';
+import { submitReview } from '../lib/reviews';
 import { COLORS } from '@/constants/theme';
 
 interface Order {
@@ -19,6 +20,7 @@ interface Order {
   namaMenu?: string;
   imageUrl?: string;
   harga: number;
+  storeId?: string;
   // Termasuk 'selesai'/'batal' (skema lama, Bahasa Indonesia) karena order
   // yang dibuat SEBELUM standar disatukan ke 'completed'/'cancelled' masih
   // bisa ada di Firestore. UI sengaja cek dua-duanya (lihat badge di bawah).
@@ -67,6 +69,16 @@ export default function OrdersScreen() {
   const [storeLocation, setStoreLocation] = useState<StoreLocation | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const userId = auth.currentUser?.uid;
+
+  // Set berisi orderId yang SUDAH direview, dipakai buat mutusin tampilan
+  // tombol di tiap card: "Beri Rating" (belum pernah) vs "Rating Terkirim"
+  // (sudah). Karena docId review = orderId (lihat lib/reviews.ts), cukup
+  // dengar koleksi reviews milik user ini dan simpan id-nya doang.
+  const [reviewedOrderIds, setReviewedOrderIds] = useState<Set<string>>(new Set());
+  const [ratingModal, setRatingModal] = useState<Order | null>(null);
+  const [ratingValue, setRatingValue] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   // Lacak status TERAKHIR yang udah pernah keliatan per order id, biar bisa
   // bedain "status beneran baru berubah barusan" vs "ini emang dari awal
@@ -130,6 +142,18 @@ export default function OrdersScreen() {
     return unsub;
   }, [userId]);
 
+  // Dengar koleksi reviews milik user ini secara real-time, biar begitu
+  // submit rating berhasil, tombol di card langsung berubah jadi "Rating
+  // Terkirim" tanpa perlu refresh manual.
+  useEffect(() => {
+    if (!userId) return;
+    const q = query(collection(db, 'reviews'), where('userId', '==', userId));
+    const unsub = onSnapshot(q, (snap) => {
+      setReviewedOrderIds(new Set(snap.docs.map((d) => d.id)));
+    });
+    return unsub;
+  }, [userId]);
+
   // Ambil lokasi toko (alamat, lat, lng) dari magic_bags begitu modal
   // dibuka, jadi pembeli langsung tahu dimana harus pickup tanpa perlu
   // balik ke tab Toko.
@@ -158,6 +182,43 @@ export default function OrdersScreen() {
     const label = encodeURIComponent(qrModal?.tokoNama || 'Toko');
     const url = `https://www.google.com/maps/search/?api=1&query=${storeLocation.lat},${storeLocation.lng}&query_place_id=${label}`;
     Linking.openURL(url).catch(() => {});
+  };
+
+  const openRatingModal = (item: Order) => {
+    setRatingValue(0);
+    setRatingComment('');
+    setRatingModal(item);
+  };
+
+  const submitRating = async () => {
+    if (!ratingModal || !userId) return;
+    if (!ratingModal.storeId) {
+      Alert.alert('Gagal', 'Data toko untuk pesanan ini tidak lengkap, tidak bisa diberi rating.');
+      return;
+    }
+    if (ratingValue < 1) {
+      Alert.alert('Validasi', 'Pilih dulu jumlah bintangnya ya.');
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      const namaUser =
+        auth.currentUser?.displayName ||
+        auth.currentUser?.email?.split('@')[0] ||
+        'Pembeli';
+      await submitReview(ratingModal.id, {
+        storeId: ratingModal.storeId,
+        userId,
+        userName: namaUser,
+        rating: ratingValue,
+        comment: ratingComment.trim(),
+      });
+      setRatingModal(null);
+    } catch (e: any) {
+      Alert.alert('Gagal Mengirim Rating', e?.message ?? 'Terjadi kesalahan, coba lagi.');
+    } finally {
+      setSubmittingReview(false);
+    }
   };
 
   const handleCardPress = (item: Order) => {
@@ -205,8 +266,31 @@ export default function OrdersScreen() {
             {toDate(item.createdAt)?.toLocaleString('id-ID') ?? '-'}
           </ThemedText>
         </View>
-        <View style={[styles.badge, { backgroundColor: st.color + '22' }]}>
-          <ThemedText style={[styles.badgeText, { color: st.color }]}>{st.label}</ThemedText>
+        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+          <View style={[styles.badge, { backgroundColor: st.color + '22' }]}>
+            <ThemedText style={[styles.badgeText, { color: st.color }]}>{st.label}</ThemedText>
+          </View>
+
+          {/* Tombol rating cuma muncul buat order yang udah 'completed'/
+              'selesai'. Dipisah dari onPress card (yang buka modal QR)
+              pakai Pressable sendiri, biar RN touch responder nangkep
+              tap di tombol ini duluan, bukan ikut trigger buka modal QR. */}
+          {(item.status === 'completed' || item.status === 'selesai') && (
+            reviewedOrderIds.has(item.id) ? (
+              <View style={styles.ratedBadge}>
+                <Ionicons name="star" size={11} color={COLORS.gray400} />
+                <ThemedText style={styles.ratedBadgeText}>Sudah dinilai</ThemedText>
+              </View>
+            ) : (
+              <Pressable
+                style={styles.rateBtn}
+                onPress={() => openRatingModal(item)}
+              >
+                <Ionicons name="star-outline" size={12} color={COLORS.primary} />
+                <ThemedText style={styles.rateBtnText}>Beri Rating</ThemedText>
+              </Pressable>
+            )
+          )}
         </View>
       </Pressable>
     );
@@ -367,6 +451,80 @@ export default function OrdersScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Rating Modal — muncul pas pembeli pencet "Beri Rating" di order
+          yang statusnya sudah completed/selesai. */}
+      <Modal
+        visible={!!ratingModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => (!submittingReview ? setRatingModal(null) : null)}
+      >
+        <View style={styles.overlay}>
+          <View style={[
+            styles.modal,
+            { backgroundColor: isDark ? '#1e293b' : COLORS.white },
+          ]}>
+            <View style={styles.handleBar} />
+
+            <ThemedText style={styles.modalTitle}>Beri Rating</ThemedText>
+            <ThemedText style={styles.modalToko}>{ratingModal?.tokoNama}</ThemedText>
+            {ratingModal?.namaMenu ? (
+              <ThemedText style={styles.modalMenuName}>{ratingModal.namaMenu}</ThemedText>
+            ) : null}
+
+            <View style={styles.starRow}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Pressable key={n} onPress={() => setRatingValue(n)} hitSlop={6}>
+                  <Ionicons
+                    name={n <= ratingValue ? 'star' : 'star-outline'}
+                    size={34}
+                    color="#f59e0b"
+                    style={{ marginHorizontal: 3 }}
+                  />
+                </Pressable>
+              ))}
+            </View>
+
+            <TextInput
+              value={ratingComment}
+              onChangeText={setRatingComment}
+              placeholder="Ceritain pengalaman kamu di toko ini (opsional)"
+              placeholderTextColor={COLORS.gray400}
+              multiline
+              numberOfLines={3}
+              maxLength={500}
+              editable={!submittingReview}
+              style={[
+                styles.commentInput,
+                {
+                  backgroundColor: isDark ? COLORS.gray800 : COLORS.gray100,
+                  color: isDark ? '#fff' : COLORS.dark,
+                },
+              ]}
+            />
+
+            <Pressable
+              style={[styles.closeBtn, { opacity: submittingReview ? 0.7 : 1 }]}
+              onPress={submitRating}
+              disabled={submittingReview}
+            >
+              {submittingReview ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <ThemedText style={styles.closeBtnText}>Kirim Rating</ThemedText>
+              )}
+            </Pressable>
+            <Pressable
+              style={styles.cancelRatingBtn}
+              onPress={() => setRatingModal(null)}
+              disabled={submittingReview}
+            >
+              <ThemedText style={styles.cancelRatingBtnText}>Batal</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -395,6 +553,14 @@ const styles = StyleSheet.create({
   sub: { fontSize: 12, color: COLORS.gray400, marginTop: 2 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   badgeText: { fontSize: 11, fontWeight: '700' },
+  rateBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+    backgroundColor: COLORS.primaryLight,
+  },
+  rateBtnText: { fontSize: 10, fontWeight: '700', color: COLORS.primary },
+  ratedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ratedBadgeText: { fontSize: 10, color: COLORS.gray400, fontWeight: '600' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   emptyText: { fontSize: 16, fontWeight: '700' },
   emptySubText: { fontSize: 13, color: COLORS.gray400 },
@@ -470,4 +636,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   closeBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+
+  starRow: { flexDirection: 'row', marginVertical: 16 },
+  commentInput: {
+    width: '100%', borderRadius: 14, padding: 14,
+    fontSize: 13, minHeight: 80, textAlignVertical: 'top',
+  },
+  cancelRatingBtn: { paddingVertical: 14, alignItems: 'center', width: '100%' },
+  cancelRatingBtnText: { color: COLORS.gray400, fontWeight: '700', fontSize: 13 },
 });

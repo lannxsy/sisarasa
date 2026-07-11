@@ -159,11 +159,11 @@ export default function IntroMapScreen() {
         setLocating(false);
       }
     } else {
-      // TAHAP 2: Cari toko terdekat dan lanjut ke tab
-      setRenderingToko(true);
-      setTimeout(() => {
-        router.replace('/(tabs)/toko');
-      }, 1200);
+      // TAHAP 2: Cari toko terdekat dan lanjut ke tab. Data toko (bags) sudah
+      // di-fetch dari awal screen ini dibuka (lihat useEffect magic_bags di
+      // atas), jadi tidak perlu nunggu apa-apa lagi di sini — dulu ada delay
+      // buatan 1200ms yang cuma bikin app kerasa lambat tanpa alasan.
+      router.replace('/(tabs)/toko');
     }
   };
 

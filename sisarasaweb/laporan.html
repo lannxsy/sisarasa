@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa Admin | Laporan</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="brand">
+      <i class="fa-solid fa-leaf"></i> Sisarasa
+    </div>
+    <div class="nav flex-column">
+      <a href="index.html" class="nav-link"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+      <a href="menu.html" class="nav-link"><i class="fa-solid fa-utensils"></i> Kelola Menu</a>
+      <a href="orders.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
+      <a href="laporan.html" class="nav-link active"><i class="fa-solid fa-chart-line"></i> Laporan</a>
+      <a href="settings.html" class="nav-link"><i class="fa-solid fa-gear"></i> Pengaturan Toko</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="top-header">
+      <h2 class="fw-bold mb-0">Laporan</h2>
+      <div class="d-flex align-items-center gap-4">
+        <div class="user-profile d-none d-md-flex">
+          <img src="https://ui-avatars.com/api/?name=Admin+Toko&background=ff6b6b&color=fff" alt="Admin" style="width: 40px; height: 40px; border-radius: 50%;">
+          <div class="d-none d-md-block">
+            <div class="fw-bold user-profile-name" style="font-size: 0.9rem;">Mitra Sisarasa</div>
+            <div class="text-muted" style="font-size: 0.8rem;">Admin Toko</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ringkasan (all-time, bukan cuma 50 order terakhir kayak Dashboard) -->
+    <div class="row g-4 mb-4">
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Total Omzet</div>
+              <h3 class="fw-bold mb-0" id="repRevenue">-</h3>
+            </div>
+            <div class="stat-icon icon-purple"><i class="fa-solid fa-wallet"></i></div>
+          </div>
+          <div class="text-muted" style="font-size: 0.85rem;">Seluruh pesanan Selesai</div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Pesanan Selesai</div>
+              <h3 class="fw-bold mb-0" id="repCompleted">-</h3>
+            </div>
+            <div class="stat-icon icon-green"><i class="fa-solid fa-circle-check"></i></div>
+          </div>
+          <div class="text-muted" style="font-size: 0.85rem;">Sepanjang waktu</div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Pesanan Dibatalkan</div>
+              <h3 class="fw-bold mb-0" id="repCancelled">-</h3>
+            </div>
+            <div class="stat-icon icon-orange"><i class="fa-solid fa-circle-xmark"></i></div>
+          </div>
+          <div class="text-muted" style="font-size: 0.85rem;">Sepanjang waktu</div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Rating Toko</div>
+              <h3 class="fw-bold mb-0" id="repRating">-</h3>
+            </div>
+            <div class="stat-icon icon-blue"><i class="fa-solid fa-star"></i></div>
+          </div>
+          <div class="text-muted" id="repRatingCount" style="font-size: 0.85rem;">Memuat...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <!-- Menu Terlaris -->
+      <div class="col-lg-6">
+        <div class="table-container h-100">
+          <h5 class="fw-bold mb-4">Menu Terlaris</h5>
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Menu</th>
+                  <th class="text-end">Terjual</th>
+                  <th class="text-end">Omzet</th>
+                </tr>
+              </thead>
+              <tbody id="topMenuTableBody">
+                <tr>
+                  <td colspan="3" class="text-center text-muted py-4">
+                    <i class="fa-solid fa-spinner fa-spin me-2"></i> Menghitung...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ulasan Pembeli -->
+      <div class="col-lg-6">
+        <div class="table-container h-100">
+          <h5 class="fw-bold mb-4">Ulasan Pembeli</h5>
+          <div id="reviewsList" style="max-height: 420px; overflow-y: auto;">
+            <div class="text-center text-muted py-3"><i class="fa-solid fa-spinner fa-spin"></i> Memuat...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script type="module" src="assets/js/auth-guard.js"></script>
+
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import {
+      collection, doc, query, where, orderBy, onSnapshot, getDocs
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    function formatRupiah(n) {
+      return 'Rp ' + Math.round(n || 0).toLocaleString('id-ID');
+    }
+
+    function timeAgo(ts) {
+      if (!ts) return '';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+      if (diff < 60) return diff + 'd lalu';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm lalu';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'j lalu';
+      return Math.floor(diff / 86400) + ' hari lalu';
+    }
+
+    // Komentar & nama di dokumen `reviews` itu teks bebas dari pembeli
+    // (bukan data terkontrol kayak nama toko/menu) — WAJIB di-escape sebelum
+    // masuk innerHTML, supaya pembeli iseng gak bisa nyuntik HTML/script
+    // lewat kolom komentar rating.
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str ?? '';
+      return div.innerHTML;
+    }
+
+    // ── Normalisasi dokumen order ───────────────────────────────────────────
+    // Sama seperti index.html/orders.html: order baru pakai itemName/qty/
+    // totalPrice, order lama pakai tokoNama/namaMenu/jumlah/harga.
+    function normalizeOrder(data) {
+      return {
+        itemName: data.itemName || data.namaMenu || data.tokoNama || 'Pesanan',
+        qty: Number(data.qty || data.jumlah || 1),
+        totalPrice: Number(data.totalPrice ?? data.harga ?? 0),
+        status: data.status || 'pending',
+      };
+    }
+
+    let started = false;
+
+    async function startLaporan(uid) {
+      if (started) return;
+      started = true;
+
+      // ── Ringkasan + Menu Terlaris ───────────────────────────────────────────
+      // Ambil SEMUA order milik toko ini (bukan cuma 50 terakhir kayak
+      // Dashboard) — laporan harus akurat sepanjang waktu, bukan cuma
+      // sekilas aktivitas terbaru.
+      const ordersQ = query(collection(db, 'orders'), where('storeId', '==', uid));
+      onSnapshot(ordersQ, (snap) => {
+        let revenue = 0, completedCount = 0, cancelledCount = 0;
+        const menuStats = {}; // nama menu -> { qty, omzet }
+
+        snap.forEach((docSnap) => {
+          const d = normalizeOrder(docSnap.data());
+          const isCompleted = d.status === 'completed' || d.status === 'selesai';
+          const isCancelled = d.status === 'cancelled' || d.status === 'batal';
+
+          if (isCompleted) {
+            completedCount++;
+            revenue += d.totalPrice;
+            if (!menuStats[d.itemName]) menuStats[d.itemName] = { qty: 0, omzet: 0 };
+            menuStats[d.itemName].qty += d.qty;
+            menuStats[d.itemName].omzet += d.totalPrice;
+          } else if (isCancelled) {
+            cancelledCount++;
+          }
+        });
+
+        document.getElementById('repRevenue').textContent = formatRupiah(revenue);
+        document.getElementById('repCompleted').textContent = completedCount;
+        document.getElementById('repCancelled').textContent = cancelledCount;
+
+        // Top 5 menu terlaris, diurutkan dari qty terjual paling banyak
+        const topMenu = Object.entries(menuStats)
+          .sort((a, b) => b[1].qty - a[1].qty)
+          .slice(0, 5);
+
+        const tbody = document.getElementById('topMenuTableBody');
+        if (topMenu.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">Belum ada pesanan Selesai.</td></tr>';
+        } else {
+          tbody.innerHTML = topMenu.map(([nama, s]) => `
+            <tr>
+              <td class="fw-medium">${escapeHtml(nama)}</td>
+              <td class="text-end">${s.qty}x</td>
+              <td class="text-end">${formatRupiah(s.omzet)}</td>
+            </tr>
+          `).join('');
+        }
+      });
+
+      // ── Rating toko (ratingAvg / ratingCount) ───────────────────────────────
+      onSnapshot(doc(db, 'stores', uid), (snap) => {
+        const data = snap.exists() ? snap.data() : {};
+        const ratingCount = data.ratingCount || 0;
+        const ratingAvg = data.ratingAvg || 0;
+        document.getElementById('repRating').textContent =
+          ratingCount > 0 ? ratingAvg.toFixed(1) + ' ★' : '- ★';
+        document.getElementById('repRatingCount').textContent =
+          ratingCount > 0 ? `${ratingCount} ulasan` : 'Belum ada ulasan';
+      });
+
+      // ── Daftar ulasan pembeli (semua, terbaru duluan) ───────────────────────
+      const reviewsQ = query(
+        collection(db, 'reviews'),
+        where('storeId', '==', uid),
+        orderBy('createdAt', 'desc')
+      );
+      onSnapshot(reviewsQ, (snap) => {
+        const list = document.getElementById('reviewsList');
+        if (snap.empty) {
+          list.innerHTML = '<p class="text-muted text-center small">Belum ada ulasan dari pembeli.</p>';
+          return;
+        }
+        let html = '';
+        snap.forEach((docSnap) => {
+          const r = docSnap.data();
+          const stars = Array.from({ length: 5 }, (_, i) =>
+            `<i class="fa-solid fa-star" style="color:${i < (r.rating || 0) ? '#f59e0b' : '#e2e8f0'}; font-size: 0.8rem;"></i>`
+          ).join('');
+          html += `
+            <div class="d-flex justify-content-between align-items-start py-2 border-bottom">
+              <div class="flex-grow-1 me-2">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <span class="fw-bold" style="font-size:0.9rem;">${escapeHtml(r.userName || 'Pembeli')}</span>
+                  <span>${stars}</span>
+                </div>
+                ${r.comment ? `<div class="text-muted small">${escapeHtml(r.comment)}</div>` : ''}
+              </div>
+              <div class="text-muted small flex-shrink-0">${timeAgo(r.createdAt)}</div>
+            </div>`;
+        });
+        list.innerHTML = html;
+      });
+    }
+
+    // Tunggu sisarasa:authReady — jangan start dari localStorage langsung
+    // (lihat catatan di orders.html soal race condition permission-denied).
+    document.addEventListener('sisarasa:authReady', (e) => {
+      if (e.detail.uid) startLaporan(e.detail.uid);
+    });
+  </script>
+</body>
+</html>
