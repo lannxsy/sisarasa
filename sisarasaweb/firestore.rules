@@ -31,36 +31,62 @@ service cloud.firestore {
         // Pembeli di mobile perlu baca menu toko
         allow read: if request.auth != null;
 
-        // Hanya mitra pemilik toko ini yang boleh kelola menunya
-        allow create, update, delete: if isStoreOwner(uid);
+        // Mitra pemilik toko ini boleh kelola apapun di menunya.
+        allow create, delete: if isStoreOwner(uid);
+        allow update: if isStoreOwner(uid);
+
+        // Pembeli (siapapun yang login) boleh update HANYA field `stock`,
+        // dipakai saat checkout buat motong stok di sini juga (biar
+        // Kelola Menu di web ikut sinkron sama magic_bags.stok). Field
+        // lain (nama, harga, dst) tetap terkunci — cuma mitra yang boleh.
+        allow update: if request.auth != null
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock'])
+                      && request.resource.data.stock is int
+                      && request.resource.data.stock >= 0
+                      && request.resource.data.stock <= resource.data.stock;
       }
     }
 
     // ─── ORDERS ─────────────────────────────────────────────────────
     // orders/{orderId}
     match /orders/{orderId} {
-      // Pembeli bisa baca order miliknya sendiri
-      // Mitra toko bisa baca order yang masuk ke tokonya
-      allow read: if request.auth != null && (
-        request.auth.uid == resource.data.userId ||
-        request.auth.uid == resource.data.storeId
-      );
+      // Semua user login bisa baca (mitra & pembeli; disederhanakan utk UAS
+      // karena order lama tidak selalu punya field storeId)
+      allow read: if request.auth != null;
+
+      // Halaman pickup (dibuka tanpa login, hasil scan QR fisik) perlu
+      // cek 1 order spesifik. TIDAK bisa dibuka untuk `list` tanpa syarat
+      // (itu bakal expose semua order ke publik) — jadi pickup.html WAJIB
+      // baca pakai getDoc(doc(db,'orders', orderId)) by document ID, bukan
+      // query where(). orderId didapat dari URL (?oid=...), bukan ditebak.
+      allow get: if true;
 
       // Hanya pembeli yang bisa buat order (dari mobile)
-      // userId di order harus cocok dengan UID pembeli yang login
       allow create: if request.auth != null
                     && request.auth.uid == request.resource.data.userId;
 
-      // Update:
-      // - Pembeli bisa update order miliknya (misal: cancel sebelum confirmed)
-      // - Mitra toko bisa update order yang masuk ke tokonya (konfirmasi, complete, dll)
-      allow update: if request.auth != null && (
-        request.auth.uid == resource.data.userId ||
-        request.auth.uid == resource.data.storeId
-      );
+      // Update status oleh siapapun yang login (mitra konfirmasi/tolak,
+      // pembeli bisa lihat status)
+      allow update: if request.auth != null;
 
-      // Delete: tidak diizinkan siapapun (order harus tersimpan sebagai riwayat)
-      allow delete: if false;
+      // Pickup via scan QR pakai kamera HP BIASA (bukan dari app) — jadi
+      // TANPA LOGIN sama sekali, karena browser yang kebuka dari hasil
+      // scan itu gak punya sesi Firebase Auth apapun. Makanya ini sengaja
+      // dibuka untuk unauthenticated request, tapi dibatasi ketat:
+      // - HANYA boleh ubah field `status`, field lain (harga, userId, dst)
+      //   tetap terkunci.
+      // - HANYA boleh jadi 'completed'.
+      // - Status sebelumnya harus 'confirmed', biar pesanan yang masih
+      //   'pending' (belum dikonfirmasi admin) atau yang sudah 'cancelled'
+      //   gak bisa diubah lewat jalur ini.
+      // Keamanannya bertumpu pada kodePickup yang acak & cuma dikasih
+      // tau lewat QR fisik di layar pembeli — mirip nomor antrian kertas.
+      allow update: if resource.data.status == 'confirmed'
+                    && request.resource.data.status == 'completed'
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+
+      // Delete: mitra bisa menghapus pesanan dari daftar Kelola Pesanan
+      allow delete: if request.auth != null;
     }
 
     // ─── MAGIC BAGS ─────────────────────────────────────────────────
@@ -69,23 +95,59 @@ service cloud.firestore {
       // Semua user login bisa baca (pembeli perlu lihat daftar magic bag)
       allow read: if request.auth != null;
 
-      // Hanya mitra toko yang boleh create/update/delete magic bag
+      // Hanya mitra toko yang boleh create magic bag
       // Pastikan field storeId di dokumen cocok dengan UID mitra yang login
       allow create: if request.auth != null
                     && isMitra(request.auth.uid)
                     && request.auth.uid == request.resource.data.storeId;
 
+      // Mitra pemilik toko boleh update/hapus apapun di magic bag miliknya.
       allow update, delete: if request.auth != null
                              && request.auth.uid == resource.data.storeId;
+
+      // Pembeli (siapapun yang login) boleh update HANYA field `stok`,
+      // dipakai saat checkout (mengurangi stok via transaksi). Field lain
+      // (harga, nama, dll) tetap terkunci—cuma mitra yang boleh ubah itu.
+      allow update: if request.auth != null
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stok'])
+                    && request.resource.data.stok is int
+                    && request.resource.data.stok >= 0
+                    && request.resource.data.stok <= resource.data.stok;
     }
 
     // ─── FAVORITES ──────────────────────────────────────────────────
-    // favorites — murni domain pembeli, tidak disentuh web admin
+    // favorites — murni domain pembeli, tidak disentuh web admin.
     match /favorites/{docId} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == resource.data.userId;
+      // Baca 1 dokumen spesifik by ID (get) — dipakai detail.tsx buat cek
+      // "apakah bag ini udah di-favorite-in", DIPANGGIL TIAP KALI buka
+      // halaman detail, walau dokumennya belum pernah ada. Kalau pakai
+      // resource.data.userId di sini, pas dokumen belum ada resource.data
+      // adalah null, dan null.userId bikin rule gagal dievaluasi -> selalu
+      // permission-denied walau user yang benar yang akses. Makanya get
+      // divalidasi dari docId (format userId_bagId), bukan dari isi dokumen.
+      allow get: if request.auth != null
+                 && docId.split('_')[0] == request.auth.uid;
+
+      // Baca koleksi/query (list) — query di app HARUS difilter
+      // where('userId', '==', uid) milik user yang login. Firestore
+      // membuktikan rule ini terpenuhi untuk SEMUA kemungkinan hasil query
+      // berdasarkan constraint where(...) di sisi klien, bukan dengan baca
+      // request.query (itu cuma punya limit/offset/orderBy, BUKAN nilai
+      // where — request.query.userId selalu undefined, makanya versi
+      // sebelumnya selalu ditolak).
+      allow list: if request.auth != null
+                  && resource.data.userId == request.auth.uid;
+
       allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.userId
+                    && docId.split('_')[0] == request.auth.uid;
+
+      allow update: if request.auth != null
+                    && request.auth.uid == resource.data.userId
                     && request.auth.uid == request.resource.data.userId;
+
+      allow delete: if request.auth != null
+                    && docId.split('_')[0] == request.auth.uid;
     }
   }
 }

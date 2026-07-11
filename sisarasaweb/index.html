@@ -300,10 +300,17 @@
         const dayKeys = [];
         const dayLabels = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
         const revenueByDay = {};
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date();
-          d.setHours(0, 0, 0, 0);
-          d.setDate(d.getDate() - i);
+        // Mulai dari Senin minggu ini (bukan 7 hari ke belakang)
+        const today2 = new Date();
+        today2.setHours(0, 0, 0, 0);
+        const dayOfWeek = today2.getDay(); // 0=Min, 1=Sen, ..., 6=Sab
+        // Jarak dari Senin: kalau hari ini Min (0) -> mundur 6, Sen (1) -> 0, dst
+        const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const monday = new Date(today2);
+        monday.setDate(today2.getDate() - diffToMonday);
+        for (let i = 0; i <= 6; i++) {
+          const d = new Date(monday);
+          d.setDate(monday.getDate() + i);
           const key = localDateKey(d);
           dayKeys.push(key);
           revenueByDay[key] = 0;

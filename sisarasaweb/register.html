@@ -74,18 +74,12 @@
           <h2 class="fw-bold text-primary-custom mb-0"><i class="fa-solid fa-leaf"></i> Sisarasa</h2>
         </div>
         <h3 class="fw-bold mb-1">Daftar Mitra Baru 🚀</h3>
-        <p class="text-muted mb-4">Lengkapi data di bawah ini untuk mendaftarkan toko Anda.</p>
+        <p class="text-muted mb-4">Buat akun mitra Anda terlebih dahulu. Detail toko akan diisi di langkah berikutnya.</p>
         
         <form id="registerForm">
-          <div class="row g-3 mb-3">
-            <div class="col-sm-6">
-              <label class="form-label fw-medium">Nama Lengkap</label>
-              <input type="text" class="form-control" id="fullName" placeholder="Nama Anda" required>
-            </div>
-            <div class="col-sm-6">
-              <label class="form-label fw-medium">Nama Toko</label>
-              <input type="text" class="form-control" id="storeName" placeholder="Contoh: Warung Ibu Imas" required>
-            </div>
+          <div class="mb-3">
+            <label class="form-label fw-medium">Nama Lengkap</label>
+            <input type="text" class="form-control" id="fullName" placeholder="Nama Anda" required>
           </div>
           
           <div class="mb-3">
@@ -111,7 +105,7 @@
             </label>
           </div>
           
-          <button type="submit" id="registerBtn" class="btn btn-primary-custom w-100 mb-3 py-2 fs-6">Daftarkan Toko</button>
+          <button type="submit" id="registerBtn" class="btn btn-primary-custom w-100 mb-3 py-2 fs-6">Lanjutkan</button>
           
           <p class="text-center text-muted small mb-0">
             Sudah punya akun? <a href="login.html" class="fw-bold text-decoration-none" style="color: var(--primary-color);">Masuk di sini</a>
@@ -133,7 +127,6 @@
       e.preventDefault();
       
       const fullName = document.getElementById('fullName').value;
-      const storeName = document.getElementById('storeName').value;
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
       const confirmPassword = document.getElementById('confirmPassword').value;
@@ -150,28 +143,28 @@
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // Create store document
+        // Buat dokumen toko MINIMAL dulu (belum lengkap). Field setupComplete
+        // inilah yang dipakai auth-guard.js untuk memutuskan apakah user perlu
+        // diarahkan ke setup-toko.html sebelum bisa mengakses halaman lain.
         await setDoc(doc(db, "stores", user.uid), {
           ownerName: fullName,
-          name: storeName,
           email: email,
           isActive: true,
+          setupComplete: false,
           createdAt: new Date()
         });
 
-        // Simpan ke localStorage SEBELUM redirect, supaya index.html (yang
+        // Simpan ke localStorage SEBELUM redirect, supaya halaman tujuan (yang
         // mengecek localStorage secara synchronous saat load) tidak salah
         // mengira belum login dan melempar balik ke login.html.
         localStorage.setItem('userUid', user.uid);
-        localStorage.setItem('storeName', storeName);
 
-        alert("Pendaftaran berhasil!");
-        window.location.href = 'index.html';
+        window.location.href = 'setup-toko.html';
       } catch (error) {
         console.error("Error signing up:", error);
         alert("Gagal mendaftar: " + error.message);
       } finally {
-        registerBtn.innerHTML = 'Daftarkan Toko';
+        registerBtn.innerHTML = 'Lanjutkan';
         registerBtn.disabled = false;
       }
     });

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa | Setup Toko</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <link rel="stylesheet" href="assets/css/style.css">
+  <style>
+    body {
+      background-color: var(--bg-color);
+      min-height: 100vh;
+      margin: 0;
+    }
+    .setup-wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    .setup-card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+      padding: 2.5rem;
+    }
+    .form-control, .form-select {
+      padding: 0.7rem 1rem;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+    }
+    .form-control:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 0.25rem rgba(255, 107, 107, 0.25);
+    }
+    .step-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 107, 107, 0.1);
+      color: var(--primary-color);
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 0.4rem 0.9rem;
+      border-radius: 999px;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="setup-wrap">
+    <div class="setup-card">
+      <span class="step-badge"><i class="fa-solid fa-store"></i> Langkah Terakhir</span>
+      <h3 class="fw-bold mb-1">Setup Profil Toko Anda</h3>
+      <p class="text-muted mb-4">Lengkapi data toko di bawah ini agar pelanggan dapat menemukan dan memesan dari toko Anda.</p>
+
+      <form id="setupForm">
+        <div class="row g-3 mb-3">
+          <div class="col-md-7">
+            <label class="form-label fw-medium">Nama Toko</label>
+            <input type="text" class="form-control" id="storeName" placeholder="Contoh: Warung Ibu Imas" required>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label fw-medium">Nomor Telepon (WhatsApp)</label>
+            <input type="text" class="form-control" id="storePhone" placeholder="081234567890" required>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-medium">Alamat Lengkap</label>
+          <textarea class="form-control" id="storeAddress" rows="2" placeholder="Jl. Contoh No. 123, Kota" required></textarea>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label fw-medium"><i class="fa-solid fa-map-location-dot"></i> Titik Lokasi Peta (Koordinat GPS)</label>
+          <p class="small text-muted mb-2">Geser pin merah ke lokasi persis toko Anda, atau klik di peta untuk memindahkannya.</p>
+          <div id="storeMap" style="height: 320px; width: 100%; border-radius: 12px; border: 1px solid #e2e8f0;"></div>
+        </div>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <label class="form-label text-muted">Latitude</label>
+            <input type="text" class="form-control bg-light" id="latitude" value="-6.914744" readonly>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-muted">Longitude</label>
+            <input type="text" class="form-control bg-light" id="longitude" value="107.609810" readonly>
+          </div>
+        </div>
+
+        <button type="submit" id="setupBtn" class="btn btn-primary-custom w-100 py-2 fs-6">
+          <i class="fa-solid fa-check me-2"></i> Selesaikan Setup & Masuk Dashboard
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script type="module" src="assets/js/auth-guard.js"></script>
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import { doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    let uid = localStorage.getItem('userUid');
+
+    const storeNameInput = document.getElementById('storeName');
+    const storePhoneInput = document.getElementById('storePhone');
+    const storeAddressInput = document.getElementById('storeAddress');
+    const latitudeInput = document.getElementById('latitude');
+    const longitudeInput = document.getElementById('longitude');
+    const setupForm = document.getElementById('setupForm');
+    const setupBtn = document.getElementById('setupBtn');
+
+    // ── Inisialisasi peta Leaflet (default Bandung, sama seperti settings.html) ──
+    const map = L.map('storeMap').setView([-6.914744, 107.609810], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    const marker = L.marker([-6.914744, 107.609810], { draggable: true }).addTo(map);
+
+    marker.on('dragend', () => {
+      const pos = marker.getLatLng();
+      latitudeInput.value = pos.lat;
+      longitudeInput.value = pos.lng;
+    });
+
+    map.on('click', (e) => {
+      marker.setLatLng(e.latlng);
+      latitudeInput.value = e.latlng.lat;
+      longitudeInput.value = e.latlng.lng;
+    });
+
+    setTimeout(() => map.invalidateSize(), 100);
+
+    // ── Submit setup toko ──────────────────────────────────────────────────────
+    setupForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!uid) {
+        alert('Sesi login tidak ditemukan. Silakan login ulang.');
+        window.location.href = 'login.html';
+        return;
+      }
+
+      setupBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Menyimpan...';
+      setupBtn.disabled = true;
+
+      try {
+        await setDoc(doc(db, 'stores', uid), {
+          name: storeNameInput.value,
+          phone: storePhoneInput.value,
+          address: storeAddressInput.value,
+          latitude: parseFloat(latitudeInput.value),
+          longitude: parseFloat(longitudeInput.value),
+          isActive: true,
+          setupComplete: true,
+          updatedAt: new Date()
+        }, { merge: true });
+
+        // Sinkronkan cache localStorage supaya sidebar/header halaman lain
+        // langsung menampilkan nama toko tanpa perlu logout-login.
+        localStorage.setItem('storeName', storeNameInput.value);
+
+        window.location.href = 'index.html';
+      } catch (error) {
+        console.error('Error saving store setup:', error);
+        alert('Gagal menyimpan data toko: ' + error.message);
+        setupBtn.innerHTML = '<i class="fa-solid fa-check me-2"></i> Selesaikan Setup & Masuk Dashboard';
+        setupBtn.disabled = false;
+      }
+    });
+
+    // Auth-guard.js akan menangani redirect kalau belum login sama sekali,
+    // atau kalau toko sudah setupComplete (akan langsung dilempar ke index.html
+    // oleh auth-guard, lihat logic di sana).
+    document.addEventListener('sisarasa:authReady', (e) => {
+      if (e.detail.uid) uid = e.detail.uid;
+    });
+  </script>
+</body>
+</html>
