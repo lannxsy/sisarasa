@@ -173,9 +173,13 @@
               <textarea class="form-control" id="menuDeskripsi" rows="2" placeholder="Ceritakan isi Magic Bag ini..."></textarea>
             </div>
 
-            
+            <div class="mb-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="menuIsActive" checked>
+                <label class="form-check-label text-muted" for="menuIsActive">Aktifkan Langsung (tampil di aplikasi)</label>
+              </div>
+            </div>
 
-            
           </form>
         </div>
         <div class="modal-footer border-0">
@@ -259,7 +263,7 @@
         : `<span style="margin-right:8px">${data.emoji || '🛍️'}</span>`;
       return `
         <tr id="row-${id}">
-          <td class="fw-medium d-flex align-items-center">${thumb}${data.name}</td>
+          <td class="fw-medium d-flex align-items-center">${thumb}${data.name || '<span class="text-danger fst-italic">(Nama belum diisi — klik Edit)</span>'}</td>
           <td><span class="text-decoration-line-through text-muted small">Rp ${Number(data.originalPrice).toLocaleString('id-ID')}</span></td>
           <td class="text-success fw-bold">Rp ${Number(data.discountPrice).toLocaleString('id-ID')}</td>
           <td>${data.pickupStart} - ${data.pickupEnd}</td>
@@ -375,14 +379,36 @@
       const pickupStart = document.getElementById('menuPickupStart').value;
       const pickupEnd = document.getElementById('menuPickupEnd').value;
       const imageUrl = document.getElementById('menuImageUrl').value.trim();
+      const nameVal = document.getElementById('menuName').value.trim();
+      const originalPriceVal = document.getElementById('menuOriginalPrice').value;
+      const discountPriceVal = document.getElementById('menuDiscountPrice').value;
+
+      // VALIDASI WAJIB: tombol Simpan ini type="button" (bukan "submit"),
+      // jadi atribut required di HTML gak pernah otomatis dicek browser.
+      // Tanpa pengecekan manual ini, form kosong bisa aja ke-save ke
+      // Firestore (itemName kosong, harga NaN, dst) — dan itu KEJADIAN,
+      // makanya beberapa menu sebelumnya nongol tanpa nama.
+      if (!nameVal) {
+        alert('Nama Menu wajib diisi.');
+        document.getElementById('menuName').focus();
+        return;
+      }
+      if (!originalPriceVal || !discountPriceVal || Number(originalPriceVal) <= 0 || Number(discountPriceVal) <= 0) {
+        alert('Harga Asli dan Harga Diskon wajib diisi dengan angka lebih dari 0.');
+        return;
+      }
+      if (!pickupStart || !pickupEnd) {
+        alert('Jam Pickup (mulai & selesai) wajib diisi.');
+        return;
+      }
 
       // Payload untuk stores/{uid}/menus
       const menuPayload = {
-        name: document.getElementById('menuName').value,
+        name: nameVal,
         emoji: document.getElementById('menuEmoji').value || '🛍️',
         imageUrl,
-        originalPrice: Number(document.getElementById('menuOriginalPrice').value),
-        discountPrice: Number(document.getElementById('menuDiscountPrice').value),
+        originalPrice: Number(originalPriceVal),
+        discountPrice: Number(discountPriceVal),
         pickupStart,
         pickupEnd,
         stock: Number(document.getElementById('menuStock').value),

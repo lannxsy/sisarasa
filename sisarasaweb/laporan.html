@@ -173,7 +173,7 @@
     // totalPrice, order lama pakai tokoNama/namaMenu/jumlah/harga.
     function normalizeOrder(data) {
       return {
-        itemName: data.itemName || data.namaMenu || data.tokoNama || 'Pesanan',
+        itemName: data.itemName || data.namaMenu || 'Pesanan',
         qty: Number(data.qty || data.jumlah || 1),
         totalPrice: Number(data.totalPrice ?? data.harga ?? 0),
         status: data.status || 'pending',
@@ -246,10 +246,15 @@
       });
 
       // ── Daftar ulasan pembeli (semua, terbaru duluan) ───────────────────────
+      // SENGAJA tidak pakai orderBy('createdAt') di query ini. Kombinasi
+      // where(storeId) + orderBy(createdAt) field beda itu butuh composite
+      // index yang belum tentu ada di Firestore project ini — kalau index-nya
+      // belum dibuat, query gagal total dan onSnapshot gak pernah kepanggil
+      // (spinner "Memuat..." nyangkut selamanya, tanpa pesan error apapun).
+      // Jadi urutan "terbaru duluan" diatur manual di JS setelah data datang.
       const reviewsQ = query(
         collection(db, 'reviews'),
-        where('storeId', '==', uid),
-        orderBy('createdAt', 'desc')
+        where('storeId', '==', uid)
       );
       onSnapshot(reviewsQ, (snap) => {
         const list = document.getElementById('reviewsList');
@@ -257,8 +262,14 @@
           list.innerHTML = '<p class="text-muted text-center small">Belum ada ulasan dari pembeli.</p>';
           return;
         }
+        // Urutkan terbaru duluan secara manual (pengganti orderBy di query)
+        const docs = snap.docs.slice().sort((a, b) => {
+          const ta = a.data().createdAt?.toMillis ? a.data().createdAt.toMillis() : 0;
+          const tb = b.data().createdAt?.toMillis ? b.data().createdAt.toMillis() : 0;
+          return tb - ta;
+        });
         let html = '';
-        snap.forEach((docSnap) => {
+        docs.forEach((docSnap) => {
           const r = docSnap.data();
           const stars = Array.from({ length: 5 }, (_, i) =>
             `<i class="fa-solid fa-star" style="color:${i < (r.rating || 0) ? '#f59e0b' : '#e2e8f0'}; font-size: 0.8rem;"></i>`
@@ -276,6 +287,12 @@
             </div>`;
         });
         list.innerHTML = html;
+      }, (err) => {
+        // Fallback kalau ada error lain (mis. permission-denied) — biar
+        // gak nyangkut di "Memuat..." selamanya tanpa penjelasan.
+        console.error('Gagal memuat ulasan:', err);
+        const list = document.getElementById('reviewsList');
+        if (list) list.innerHTML = '<p class="text-muted text-center small">Gagal memuat ulasan. Coba refresh halaman.</p>';
       });
     }
 

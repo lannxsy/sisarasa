@@ -158,7 +158,13 @@ export default function DetailScreen() {
           storeId: bag.storeId,
           bagId: bag.id,
           tokoNama: bag.tokoNama,
-          namaMenu: bag.namaMenu || bag.tokoNama,
+          // JANGAN fallback ke bag.tokoNama (nama TOKO) di sini — kalau
+          // bag.namaMenu kosong (menu belum dikasih nama di admin), field
+          // ini bakal PERMANEN kesimpen sebagai nama toko di dokumen order,
+          // dan gak bisa dibenerin lagi cuma dengan ubah tampilan nanti.
+          // Fallback ke label generik yang jelas-jelas nunjukin "belum diisi",
+          // bukan nyamar jadi nama toko.
+          namaMenu: bag.namaMenu || 'Menu',
           emoji: bag.emoji,
           imageUrl: bag.imageUrl || '',
           harga: bag.harga * jumlah,

@@ -155,7 +155,9 @@
         orderCode: data.orderCode || data.kodePickup || id.slice(-6).toUpperCase(),
         buyerName: data.buyerName || data.userEmail || '-',
         buyerPhone: data.buyerPhone || '',
-        itemName: data.itemName || data.tokoNama || '-',
+        // JANGAN fallback ke data.tokoNama — itu nama TOKO (dirinya sendiri),
+        // bukan nama menu yang dipesan.
+        itemName: data.itemName || data.namaMenu || '-',
         emoji: data.emoji || '🛍️',
         imageUrl: data.imageUrl || '',
         qty: data.qty || data.jumlah || 1,

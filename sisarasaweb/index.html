@@ -140,6 +140,21 @@
         </div>
       </div>
     </div>
+
+    <!-- Menu Terlaris Hari Ini -->
+    <div class="row g-4 mt-1">
+      <div class="col-12">
+        <div class="table-container">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h5 class="fw-bold mb-0">Menu Terlaris Hari Ini</h5>
+            <a href="laporan.html" class="small text-decoration-none">Lihat laporan lengkap &rarr;</a>
+          </div>
+          <div id="topItemsToday">
+            <div class="text-center text-muted py-3"><i class="fa-solid fa-spinner fa-spin"></i> Memuat...</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- (Order detail modal removed from dashboard — use orders.html for full detail) -->
@@ -218,7 +233,10 @@
     // sebagai "Rp 0" / nama kosong di dashboard walau datanya sebenarnya ada.
     function normalizeOrder(data) {
       return {
-        itemName: data.itemName || data.tokoNama || 'Pesanan',
+        // JANGAN fallback ke data.tokoNama — itu nama TOKO (dirinya sendiri),
+        // bukan nama menu. Order lama yang gak punya itemName biasanya
+        // nyimpen nama menu di field namaMenu, bukan tokoNama.
+        itemName: data.itemName || data.namaMenu || 'Pesanan',
         buyerName: data.buyerName || data.userEmail || '-',
         qty: Number(data.qty || data.jumlah || 1),
         totalPrice: Number(data.totalPrice ?? data.harga ?? 0),
@@ -286,6 +304,10 @@
         let todayCount = 0, menuSold = 0, revenue = 0, pendingCount = 0;
         let recentHtml = '';
         let shown = 0;
+        // Tally qty per nama menu, KHUSUS pesanan hari ini, buat widget
+        // "Menu Terlaris Hari Ini" — dipisah dari revenueByDay (yang buat
+        // chart mingguan) karena ini cuma soal hari ini, bukan omzet.
+        const todayItemQty = {};
 
         // Omzet 7 hari terakhir (Senin–Minggu minggu berjalan), buat chart.
         // Key-nya 'YYYY-MM-DD' format lokal (BUKAN toISOString, yang
@@ -335,6 +357,7 @@
             menuSold += d.qty;
             if (d.status === 'completed') revenue += d.totalPrice;
             if (d.status === 'pending') pendingCount++;
+            todayItemQty[d.itemName] = (todayItemQty[d.itemName] || 0) + d.qty;
           }
 
           // Akumulasi omzet harian buat chart (7 hari terakhir, status completed saja)
@@ -349,8 +372,8 @@
               <div class="d-flex align-items-center mb-3 pb-3 border-bottom">
                 <div class="me-3">${statusIcon[d.status] || statusIcon.pending}</div>
                 <div class="flex-grow-1" style="min-width:0">
-                  <div class="fw-bold text-truncate">${d.itemName}</div>
-                  <div class="text-muted small">Rp ${d.totalPrice.toLocaleString('id-ID')} • ${d.buyerName}</div>
+                  <div class="fw-bold text-truncate">${d.buyerName}</div>
+                  <div class="text-muted small">Rp ${d.totalPrice.toLocaleString('id-ID')} • ${d.itemName}</div>
                 </div>
                 <div class="ms-2 text-end flex-shrink-0">
                   <div class="text-muted small mb-1">${timeAgo(d.createdAt)}</div>
@@ -382,6 +405,24 @@
         // Update recent orders
         document.getElementById('recentOrdersList').innerHTML =
           recentHtml || '<p class="text-muted text-center small">Belum ada pesanan hari ini.</p>';
+
+        // Update "Menu Terlaris Hari Ini" (top 3 dari todayItemQty)
+        const topToday = Object.entries(todayItemQty).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        const topItemsEl = document.getElementById('topItemsToday');
+        if (topItemsEl) {
+          topItemsEl.innerHTML = topToday.length
+            ? '<div class="row g-3">' + topToday.map(([name, qty], i) => `
+                <div class="col-md-4">
+                  <div class="d-flex align-items-center gap-3 p-3" style="background:#f8fafc;border-radius:12px;">
+                    <div class="stat-icon icon-orange" style="width:40px;height:40px;font-size:0.9rem;">#${i + 1}</div>
+                    <div class="flex-grow-1" style="min-width:0">
+                      <div class="fw-bold text-truncate">${name}</div>
+                      <div class="text-muted small">${qty}x terjual hari ini</div>
+                    </div>
+                  </div>
+                </div>`).join('') + '</div>'
+            : '<p class="text-muted text-center small mb-0">Belum ada menu terjual hari ini.</p>';
+        }
 
         // Render chart omzet 7 hari terakhir dari data ASLI (bukan dummy)
         const chartLabels = dayKeys.map(k => dayLabels[new Date(k + 'T00:00:00').getDay()]);
