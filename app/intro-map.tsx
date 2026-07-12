@@ -41,7 +41,7 @@ function buatHTMLPeta(bags: MagicBag[], userLat: number, userLng: number) {
       L.marker([${b.lat}, ${b.lng}], {
         icon: L.divIcon({
           className: '',
-          html: '<div style="background:#0f3d2e;width:26px;height:26px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35)"></div>',
+          html: '<div style="background:${COLORS.primaryDark};width:26px;height:26px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35)"></div>',
           iconSize: [26, 26],
           iconAnchor: [13, 13],
         })
@@ -54,7 +54,7 @@ function buatHTMLPeta(bags: MagicBag[], userLat: number, userLng: number) {
   const userMarker =
     userLat !== 0
       ? `L.circleMarker([${userLat}, ${userLng}], {
-          radius: 8, fillColor: '#2563eb', color: '#fff',
+          radius: 8, fillColor: '${COLORS.secondaryDark}', color: '#fff',
           weight: 3, opacity: 1, fillOpacity: 1
         }).addTo(map);`
       : '';

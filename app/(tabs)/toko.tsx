@@ -8,6 +8,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { WaveHeader } from '@/components/wave-header';
 import { db } from '../lib/firebase';
 import { COLORS } from '@/constants/theme';
 import { hitungJarakKm, formatJarak } from '../lib/distance';
@@ -258,16 +259,17 @@ export default function TokoScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={[styles.header, { backgroundColor: COLORS.primary }]}>
-        <ThemedText style={styles.headerTitle}>Toko</ThemedText>
-      </View>
+      <WaveHeader height={170}>
+        <ThemedText style={[styles.headerEyebrow, { color: 'rgba(255,255,255,0.85)' }]}>Selamat datang 👋</ThemedText>
+        <ThemedText type="title" style={[styles.headerTitle, { color: '#fff' }]}>Satu Aksimu, Satu Makanan Terselamatkan</ThemedText>
+      </WaveHeader>
 
-      <View style={[styles.searchBar, { backgroundColor: isDark ? COLORS.gray800 : COLORS.gray100 }]}>
+      <View style={[styles.searchBar, { backgroundColor: COLORS.white }]}>
         <Ionicons name="search" size={18} color={COLORS.gray400} />
         <TextInput
           placeholder="Cari toko atau kategori..."
           placeholderTextColor={COLORS.gray400}
-          style={[styles.searchInput, { color: isDark ? '#fff' : COLORS.dark }]}
+          style={[styles.searchInput, { color: COLORS.dark }]}
           value={search}
           onChangeText={setSearch}
         />
@@ -294,24 +296,27 @@ export default function TokoScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 20 },
-  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  container: { flex: 1, backgroundColor: COLORS.bg },
+  headerEyebrow: { fontSize: 13, marginBottom: 2 },
+  headerTitle: { fontSize: 24, lineHeight: 28 },
   searchBar: {
-    marginHorizontal: 16, marginTop: 14, marginBottom: 6,
-    flexDirection: 'row', alignItems: 'center', borderRadius: 14,
-    paddingHorizontal: 14, height: 44,
+    marginHorizontal: 20, marginTop: -22, marginBottom: 6,
+    flexDirection: 'row', alignItems: 'center', borderRadius: 16,
+    paddingHorizontal: 14, height: 50,
+    shadowColor: COLORS.primaryDark, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 4,
   },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 14 },
   card: {
-    flexDirection: 'row', alignItems: 'center', borderRadius: 16,
+    flexDirection: 'row', alignItems: 'center', borderRadius: 18,
     padding: 12, marginBottom: 10, elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 6,
+    shadowColor: COLORS.gray800, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06, shadowRadius: 8,
+    backgroundColor: COLORS.white,
   },
   cardHabis: { opacity: 0.55 },
   cardImageWrap: {
-    width: 56, height: 56, borderRadius: 14,
+    width: 56, height: 56, borderRadius: 16,
     backgroundColor: COLORS.primaryLight,
     justifyContent: 'center', alignItems: 'center', marginRight: 12,
     overflow: 'hidden',
@@ -323,14 +328,14 @@ const styles = StyleSheet.create({
   pickupRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
   pickupText: { fontSize: 11, color: COLORS.gray400 },
   dotSep: { fontSize: 11, color: COLORS.gray400 },
-  hargaMulai: { fontSize: 13, fontWeight: '800', color: COLORS.primary, marginTop: 4 },
+  hargaMulai: { fontSize: 13, fontWeight: '800', color: COLORS.primaryDark, marginTop: 4 },
   habisText: { fontSize: 13, fontWeight: '800', color: COLORS.danger, marginTop: 4 },
   menuBadge: {
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: COLORS.accentLight,
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
   },
   menuBadgeHabis: { backgroundColor: '#fee2e2' },
-  menuBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.primaryDark },
+  menuBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.accentDark },
   menuBadgeTextHabis: { color: COLORS.danger },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   emptyText: { fontSize: 14, color: COLORS.gray400 },

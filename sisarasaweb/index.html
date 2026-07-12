@@ -407,20 +407,21 @@
           recentHtml || '<p class="text-muted text-center small">Belum ada pesanan hari ini.</p>';
 
         // Update "Menu Terlaris Hari Ini" (top 3 dari todayItemQty)
+        // Dibikin list simpel (border-bottom antar baris), nyamain gaya
+        // sama widget "Pesanan Terbaru" di sebelahnya — bukan kartu
+        // kotak-kotak lagi, biar nyambung sama tampilan dashboard.
         const topToday = Object.entries(todayItemQty).sort((a, b) => b[1] - a[1]).slice(0, 3);
         const topItemsEl = document.getElementById('topItemsToday');
         if (topItemsEl) {
           topItemsEl.innerHTML = topToday.length
-            ? '<div class="row g-3">' + topToday.map(([name, qty], i) => `
-                <div class="col-md-4">
-                  <div class="d-flex align-items-center gap-3 p-3" style="background:#f8fafc;border-radius:12px;">
-                    <div class="stat-icon icon-orange" style="width:40px;height:40px;font-size:0.9rem;">#${i + 1}</div>
-                    <div class="flex-grow-1" style="min-width:0">
-                      <div class="fw-bold text-truncate">${name}</div>
-                      <div class="text-muted small">${qty}x terjual hari ini</div>
-                    </div>
+            ? topToday.map(([name, qty], i) => `
+                <div class="d-flex align-items-center mb-3 pb-3 border-bottom">
+                  <div class="fw-bold text-muted me-3" style="width:22px;flex-shrink:0;">#${i + 1}</div>
+                  <div class="flex-grow-1" style="min-width:0">
+                    <div class="fw-bold text-truncate">${name}</div>
                   </div>
-                </div>`).join('') + '</div>'
+                  <div class="text-muted small ms-2 flex-shrink-0">${qty}x terjual</div>
+                </div>`).join('')
             : '<p class="text-muted text-center small mb-0">Belum ada menu terjual hari ini.</p>';
         }
 

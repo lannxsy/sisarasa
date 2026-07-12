@@ -6,9 +6,10 @@ import { FlatList, Image, Pressable, StyleSheet, View, useColorScheme } from 're
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { WaveHeader } from '@/components/wave-header';
 import { auth, db } from '../lib/firebase';
 import { favoritesCollection, removeFavorite } from '../lib/favorites';
-import { COLORS } from '@/constants/theme';
+import { COLORS, GRADIENTS } from '@/constants/theme';
 
 interface FavoriteItem {
   id: string;
@@ -132,9 +133,9 @@ export default function FavoritesScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={[styles.header, { backgroundColor: COLORS.primary }]}>
-        <ThemedText style={styles.headerTitle}>Favorit</ThemedText>
-      </View>
+      <WaveHeader height={130} colors={GRADIENTS.candy}>
+        <ThemedText type="title" style={{ color: '#fff', fontSize: 24 }}>Favorit</ThemedText>
+      </WaveHeader>
 
       {!authReady ? null : !userId ? (
         <View style={styles.empty}>

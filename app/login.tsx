@@ -17,6 +17,8 @@ import { FontAwesome5 } from '@expo/vector-icons';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { WaveHeader } from '@/components/wave-header';
+import { GRADIENTS } from '@/constants/theme';
 import { auth } from './lib/firebase';
 
 // Brand tokens - disamakan dengan assets/css/style.css di versi web
@@ -110,8 +112,8 @@ export default function LoginScreen() {
         <ThemedView style={styles.container}>
           <ThemedView style={[styles.card, cardStyle]}>
 
-            {/* Brand panel - meniru .auth-image di versi web */}
-            <View style={[styles.brandPanel, { backgroundColor: COLORS.primary }]}>
+            {/* Brand panel - versi gradient + wave, senada sama header di tab utama */}
+            <WaveHeader height={168} colors={GRADIENTS.sunset} waveColor={cardStyle.backgroundColor} contentPaddingTop={28}>
               <View style={styles.brandRow}>
                 <FontAwesome5 name="leaf" size={20} color="#ffffff" />
                 <ThemedText style={styles.brandName}>Sisarasa</ThemedText>
@@ -119,7 +121,7 @@ export default function LoginScreen() {
               <ThemedText style={styles.brandTagline}>
                 Selamatkan makanan, hemat lebih banyak setiap hari.
               </ThemedText>
-            </View>
+            </WaveHeader>
 
             {/* Form panel - meniru .auth-form-container di versi web */}
             <ThemedView style={styles.formPanel}>

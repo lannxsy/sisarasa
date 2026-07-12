@@ -1,9 +1,17 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  useFonts,
+  Outfit_400Regular,
+  Outfit_500Medium,
+  Outfit_600SemiBold,
+  Outfit_700Bold,
+  Outfit_800ExtraBold,
+} from '@expo-google-fonts/outfit';
 import { addNotificationTapListener, getLastNotificationResponse } from './lib/notifications';
 
 export const unstable_settings = {
@@ -14,9 +22,26 @@ export const unstable_settings = {
   anchor: 'intro-map',
 };
 
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Catatan: app sengaja SELALU pakai tema terang (lihat app.json ->
+// userInterfaceStyle: "light"), jadi RootLayout tidak lagi cek dark mode.
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const router = useRouter();
+
+  const [fontsLoaded] = useFonts({
+    Outfit_400Regular,
+    Outfit_500Medium,
+    Outfit_600SemiBold,
+    Outfit_700Bold,
+    Outfit_800ExtraBold,
+  });
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
 
   useEffect(() => {
     // Kasus 1: app sudah jalan (foreground/background), user tap notif.
@@ -40,8 +65,10 @@ export default function RootLayout() {
     return unsubscribe;
   }, [router]);
 
+  if (!fontsLoaded) return null;
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DefaultTheme}>
       <Stack>
         <Stack.Screen name="intro-map" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
@@ -50,7 +77,7 @@ export default function RootLayout() {
         <Stack.Screen name="detail" options={{ headerShown: false }} />
         <Stack.Screen name="toko-detail" options={{ headerShown: false }} />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
     </ThemeProvider>
   );
 }

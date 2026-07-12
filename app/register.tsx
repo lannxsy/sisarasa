@@ -17,6 +17,8 @@ import { FontAwesome5 } from '@expo/vector-icons';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { WaveHeader } from '@/components/wave-header';
+import { GRADIENTS } from '@/constants/theme';
 import { auth } from './lib/firebase';
 
 // Register pakai warna hijau (beda dari Login yang merah/coral Sisarasa)
@@ -101,8 +103,8 @@ export default function RegisterScreen() {
         <ThemedView style={styles.container}>
           <ThemedView style={[styles.card, cardStyle]}>
 
-            {/* Brand panel - meniru .auth-image di versi web */}
-            <View style={[styles.brandPanel, { backgroundColor: COLORS.accent }]}>
+            {/* Brand panel - versi gradient + wave, senada sama Login tapi warna hijau-teal */}
+            <WaveHeader height={168} colors={GRADIENTS.leaf} waveColor={cardStyle.backgroundColor} contentPaddingTop={28}>
               <View style={styles.brandRow}>
                 <FontAwesome5 name="leaf" size={20} color="#ffffff" />
                 <ThemedText style={styles.brandName}>Sisarasa</ThemedText>
@@ -110,7 +112,7 @@ export default function RegisterScreen() {
               <ThemedText style={styles.brandTagline}>
                 Bergabung sekarang dan nikmati promo spesial untuk pengguna baru.
               </ThemedText>
-            </View>
+            </WaveHeader>
 
             {/* Form panel - meniru .auth-form-container di versi web */}
             <ThemedView style={styles.formPanel}>

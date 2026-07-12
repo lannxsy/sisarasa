@@ -67,7 +67,7 @@ function buatMiniMap(lat: number, lng: number, namaToKo: string, emoji: string) 
   L.marker([${lat}, ${lng}], {
     icon: L.divIcon({
       className: '',
-      html: '<div style="background:#16a34a;color:#fff;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${emoji}</div>',
+      html: '<div style="background:${COLORS.primary};color:#fff;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${emoji}</div>',
       iconSize: [40, 40], iconAnchor: [20, 20],
     })
   }).addTo(map).bindPopup('<b>${namaToKo}</b>').openPopup();

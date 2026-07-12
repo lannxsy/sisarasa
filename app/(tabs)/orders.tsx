@@ -9,10 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { WaveHeader } from '@/components/wave-header';
 import { auth, db } from '../lib/firebase';
 import { registerForPushNotifications, scheduleLocalNotification } from '../lib/notifications';
 import { submitReview } from '../lib/reviews';
-import { COLORS } from '@/constants/theme';
+import { COLORS, GRADIENTS } from '@/constants/theme';
 
 interface Order {
   id: string;
@@ -298,9 +299,9 @@ export default function OrdersScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={[styles.header, { backgroundColor: COLORS.primary }]}>
-        <ThemedText style={styles.headerTitle}>Pesanan Saya</ThemedText>
-      </View>
+      <WaveHeader height={130} colors={GRADIENTS.ocean}>
+        <ThemedText type="title" style={{ color: '#fff', fontSize: 24 }}>Pesanan Saya</ThemedText>
+      </WaveHeader>
 
       {loading ? (
         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
