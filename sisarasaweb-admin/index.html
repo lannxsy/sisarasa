@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa Admin | Dashboard</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="brand">
+      <i class="fa-solid fa-shield-halved"></i> Sisarasa Admin
+    </div>
+    <div class="nav flex-column">
+      <a href="index.html" class="nav-link active"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+      <a href="toko.html" class="nav-link"><i class="fa-solid fa-store"></i> Kelola Toko</a>
+      <a href="kelola-admin.html" class="nav-link"><i class="fa-solid fa-user-shield"></i> Kelola Admin</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="top-header">
+      <div>
+        <h2 class="fw-bold mb-0">Dashboard</h2>
+        <div class="text-muted small">Ringkasan seluruh toko &amp; pesanan di platform Sisarasa</div>
+      </div>
+      <div class="d-flex align-items-center gap-4">
+        <div class="dropdown">
+          <div class="user-profile" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="cursor:pointer">
+            <img src="https://ui-avatars.com/api/?name=Admin&background=ff6b6b&color=fff" alt="Admin">
+            <div class="d-none d-md-block">
+              <div class="fw-bold" style="font-size:0.9rem">Admin</div>
+              <div class="text-muted" style="font-size:0.8rem">Super Admin</div>
+            </div>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end shadow" style="border-radius:12px;border:none;min-width:180px">
+            <li><a class="dropdown-item text-danger fw-bold" href="#" id="logoutBtn"><i class="fa-solid fa-right-from-bracket me-2"></i>Keluar</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="row g-4 mb-4">
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Total Toko</div>
+              <h3 class="fw-bold mb-0" id="statTotalStores">-</h3>
+            </div>
+            <div class="stat-icon icon-purple"><i class="fa-solid fa-store"></i></div>
+          </div>
+          <div class="text-muted" id="statActiveStores" style="font-size: 0.85rem;">Memuat...</div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Total Pesanan</div>
+              <h3 class="fw-bold mb-0" id="statTotalOrders">-</h3>
+            </div>
+            <div class="stat-icon icon-orange"><i class="fa-solid fa-cart-shopping"></i></div>
+          </div>
+          <div class="text-muted" style="font-size: 0.85rem;">Seluruh toko, sepanjang waktu</div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Total Omzet Platform</div>
+              <h3 class="fw-bold mb-0" id="statTotalRevenue">-</h3>
+            </div>
+            <div class="stat-icon icon-green"><i class="fa-solid fa-wallet"></i></div>
+          </div>
+          <div class="text-muted" style="font-size: 0.85rem;">Pesanan berstatus Selesai</div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Rating Rata-rata</div>
+              <h3 class="fw-bold mb-0" id="statAvgRating">-</h3>
+            </div>
+            <div class="stat-icon icon-blue"><i class="fa-solid fa-star"></i></div>
+          </div>
+          <div class="text-muted" id="statRatingCount" style="font-size: 0.85rem;">Memuat...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toko Terbaru (preview singkat — kelola lengkap di Kelola Toko) -->
+    <div class="table-container">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="fw-bold mb-0">Toko Terbaru</h5>
+        <a href="toko.html" class="small text-decoration-none">Kelola semua toko &rarr;</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Nama Toko</th>
+              <th>Email</th>
+              <th>Alamat</th>
+              <th>Status</th>
+              <th>Rating</th>
+              <th>Terdaftar</th>
+            </tr>
+          </thead>
+          <tbody id="storesTableBody">
+            <tr>
+              <td colspan="6" class="text-center text-muted py-4">
+                <i class="fa-solid fa-spinner fa-spin me-2"></i> Memuat daftar toko...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script type="module" src="assets/js/admin-guard.js"></script>
+
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    function formatRupiah(n) {
+      return 'Rp ' + Math.round(n || 0).toLocaleString('id-ID');
+    }
+
+    function formatDate(ts) {
+      if (!ts) return '-';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    let allStores = [];
+    let started = false;
+
+    function renderStoresTable() {
+      const tbody = document.getElementById('storesTableBody');
+      // Dashboard cuma nampilin preview 5 toko TERBARU (bukan tabel penuh
+      // + search + tombol aksi lagi — itu semua udah pindah ke toko.html,
+      // biar Dashboard tetap ringan buat "sekilas liat", bukan tempat kerja).
+      const preview = allStores
+        .slice()
+        .sort((a, b) => {
+          const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+          const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+          return tb - ta;
+        })
+        .slice(0, 5);
+
+      if (preview.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">Belum ada toko terdaftar.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = preview.map(s => {
+        const isActive = s.isActive !== false;
+        const statusBadge = !s.setupComplete
+          ? `<span class="badge" style="background:rgba(148,163,184,0.15);color:#64748b;">Belum Setup</span>`
+          : isActive
+            ? `<span class="badge" style="background:rgba(46,204,113,0.15);color:#2ecc71;">Aktif</span>`
+            : `<span class="badge" style="background:rgba(231,76,60,0.15);color:#e74c3c;">Nonaktif</span>`;
+        const ratingText = s.ratingCount > 0 ? `${(s.ratingAvg || 0).toFixed(1)} ★ (${s.ratingCount})` : '-';
+        return `
+          <tr>
+            <td class="fw-medium">${s.name || '(Nama belum diisi)'}</td>
+            <td class="text-muted">${s.email || '-'}</td>
+            <td class="text-muted">${s.address || '-'}</td>
+            <td>${statusBadge}</td>
+            <td>${ratingText}</td>
+            <td class="text-muted">${formatDate(s.createdAt)}</td>
+          </tr>`;
+      }).join('');
+    }
+
+    function startAdminDashboard() {
+      if (started) return;
+      started = true;
+
+      // ── Semua toko ───────────────────────────────────────────────────────
+      onSnapshot(collection(db, 'stores'), (snap) => {
+        allStores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        document.getElementById('statTotalStores').textContent = allStores.length;
+        const activeCount = allStores.filter(s => s.setupComplete).length;
+        document.getElementById('statActiveStores').textContent = `${activeCount} toko aktif (sudah setup)`;
+
+        const ratedStores = allStores.filter(s => s.ratingCount > 0);
+        const avgRating = ratedStores.length
+          ? ratedStores.reduce((sum, s) => sum + (s.ratingAvg || 0), 0) / ratedStores.length
+          : 0;
+        document.getElementById('statAvgRating').textContent = ratedStores.length ? avgRating.toFixed(1) + ' ★' : '- ★';
+        document.getElementById('statRatingCount').textContent = ratedStores.length
+          ? `Dari ${ratedStores.length} toko yang punya ulasan`
+          : 'Belum ada toko yang punya ulasan';
+
+        renderStoresTable();
+      }, (err) => {
+        console.error('Gagal memuat daftar toko:', err);
+        document.getElementById('storesTableBody').innerHTML =
+          `<tr><td colspan="6" class="text-center text-muted py-4">Gagal memuat data. Coba refresh halaman.</td></tr>`;
+      });
+
+      // ── Semua pesanan (lintas toko) ──────────────────────────────────────
+      onSnapshot(collection(db, 'orders'), (snap) => {
+        let revenue = 0;
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const status = d.status || 'pending';
+          if (status === 'completed' || status === 'selesai') {
+            revenue += Number(d.totalPrice ?? d.harga ?? 0);
+          }
+        });
+        document.getElementById('statTotalOrders').textContent = snap.size;
+        document.getElementById('statTotalRevenue').textContent = formatRupiah(revenue);
+      }, (err) => {
+        console.error('Gagal memuat data pesanan:', err);
+      });
+    }
+
+    document.addEventListener('sisarasaAdmin:authReady', (e) => {
+      if (e.detail.uid) startAdminDashboard();
+    });
+  </script>
+</body>
+</html>

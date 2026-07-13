@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa Admin | Login</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <style>
+    body {
+      background-color: var(--bg-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .auth-card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+      overflow: hidden;
+      max-width: 900px;
+      width: 100%;
+      display: flex;
+    }
+    .auth-image {
+      flex: 1;
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+      padding: 3rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .auth-form-container { flex: 1; padding: 3rem; }
+    .form-control { padding: 0.8rem 1rem; border-radius: 10px; border: 1px solid #e2e8f0; }
+    .form-control:focus { border-color: var(--primary-color); box-shadow: 0 0 0 0.25rem rgba(255, 107, 107, 0.25); }
+    @media (max-width: 768px) {
+      .auth-card { flex-direction: column; }
+      .auth-image { padding: 2rem; text-align: center; }
+      .auth-form-container { padding: 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container p-3">
+    <div class="auth-card mx-auto">
+      <div class="auth-image d-none d-md-flex">
+        <h2 class="fw-bold mb-3"><i class="fa-solid fa-shield-halved"></i> Sisarasa Admin</h2>
+        <p class="fs-5 mb-0">Pantau seluruh toko, pesanan, dan pertumbuhan platform Sisarasa dari satu tempat.</p>
+      </div>
+
+      <div class="auth-form-container">
+        <div class="text-center mb-4 d-md-none">
+          <h2 class="fw-bold text-primary-custom mb-0"><i class="fa-solid fa-shield-halved"></i> Sisarasa Admin</h2>
+        </div>
+        <h3 class="fw-bold mb-1">Masuk Admin</h3>
+        <p class="text-muted mb-4">Khusus tim internal Sisarasa. Bukan halaman mitra toko.</p>
+
+        <form id="loginForm">
+          <div class="mb-3">
+            <label class="form-label fw-medium">Alamat Email</label>
+            <input type="email" class="form-control" id="loginEmail" placeholder="admin@sisarasa.com" required>
+          </div>
+          <div class="mb-4">
+            <label class="form-label fw-medium">Kata Sandi</label>
+            <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" required>
+          </div>
+
+          <button type="submit" id="loginBtn" class="btn btn-primary-custom w-100 mb-3 py-2 fs-6">Masuk Sekarang</button>
+
+          <p class="text-center text-muted small mb-0">
+            Ini bukan halaman pendaftaran toko. Mitra toko silakan masuk lewat
+            <span class="fw-bold">sisarasaweb</span>, bukan di sini.
+          </p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, db } from './assets/js/firebase-config.js';
+    import { signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Sengaja TIDAK pakai onAuthStateChanged redirect-otomatis di sini
+    // seperti login.html sisarasaweb — admin-guard.js (yang di-load di
+    // index.html) yang jadi satu-satunya penentu redirect, supaya
+    // pengecekan admins/{uid} selalu lewat 1 jalur yang sama, gak ada
+    // celah tempat orang login-sah-tapi-bukan-admin nyasar ke dashboard.
+
+    const loginForm = document.getElementById('loginForm');
+    const loginBtn = document.getElementById('loginBtn');
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+
+      loginBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Memproses...';
+      loginBtn.disabled = true;
+
+      try {
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+
+        // Cek keanggotaan admin DI SINI JUGA (bukan cuma nunggu admin-guard.js
+        // di halaman berikutnya) — supaya orang yang login-sah-tapi-bukan-
+        // admin dapat pesan error yang jelas di halaman login itu sendiri,
+        // bukan sempat "ngelip" ke index.html dulu baru ditolak.
+        const adminSnap = await getDoc(doc(db, 'admins', cred.user.uid));
+        if (!adminSnap.exists()) {
+          await signOut(auth);
+          alert('Akun ini tidak terdaftar sebagai admin Sisarasa.');
+          return;
+        }
+
+        window.location.href = 'index.html';
+      } catch (error) {
+        console.error('Login error:', error);
+        let msg = 'Gagal masuk.';
+        if (error.code === 'auth/user-not-found') msg = 'Akun tidak ditemukan.';
+        else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') msg = 'Email atau kata sandi salah.';
+        else msg = error.message;
+        alert(msg);
+      } finally {
+        loginBtn.innerHTML = 'Masuk Sekarang';
+        loginBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

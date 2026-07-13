@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa Admin | Kelola Admin</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="brand">
+      <i class="fa-solid fa-shield-halved"></i> Sisarasa Admin
+    </div>
+    <div class="nav flex-column">
+      <a href="index.html" class="nav-link"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+      <a href="toko.html" class="nav-link"><i class="fa-solid fa-store"></i> Kelola Toko</a>
+      <a href="kelola-admin.html" class="nav-link active"><i class="fa-solid fa-user-shield"></i> Kelola Admin</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="top-header">
+      <div>
+        <h2 class="fw-bold mb-0">Kelola Admin</h2>
+        <div class="text-muted small">Tambah atau hapus akun yang punya akses ke panel ini</div>
+      </div>
+      <div class="d-flex align-items-center gap-4">
+        <div class="dropdown">
+          <div class="user-profile" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="cursor:pointer">
+            <img src="https://ui-avatars.com/api/?name=Admin&background=ff6b6b&color=fff" alt="Admin">
+            <div class="d-none d-md-block">
+              <div class="fw-bold" style="font-size:0.9rem">Admin</div>
+              <div class="text-muted" style="font-size:0.8rem">Super Admin</div>
+            </div>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end shadow" style="border-radius:12px;border:none;min-width:180px">
+            <li><a class="dropdown-item text-danger fw-bold" href="#" id="logoutBtn"><i class="fa-solid fa-right-from-bracket me-2"></i>Keluar</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <!-- Tambah Admin -->
+      <div class="col-lg-5">
+        <div class="table-container">
+          <h5 class="fw-bold mb-2">Tambah Admin Baru</h5>
+          <p class="text-muted small mb-4">
+            Orang yang mau ditambahin HARUS sudah punya akun Firebase Auth
+            (email + password) dulu — bikin lewat halaman manapun yang punya
+            form daftar, lalu ambil User UID-nya dari Firebase Console →
+            Authentication → Users.
+          </p>
+          <form id="addAdminForm">
+            <div class="mb-3">
+              <label class="form-label fw-medium">User UID</label>
+              <input type="text" class="form-control" id="newAdminUid" placeholder="Contoh: aB3xY9zK7pQmN..." required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-medium">Nama (buat display saja)</label>
+              <input type="text" class="form-control" id="newAdminName" placeholder="Contoh: Budi — Ops Sisarasa" required>
+            </div>
+            <button type="submit" id="addAdminBtn" class="btn btn-primary-custom w-100">
+              <i class="fa-solid fa-user-plus me-2"></i>Tambah sebagai Admin
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Daftar Admin -->
+      <div class="col-lg-7">
+        <div class="table-container">
+          <h5 class="fw-bold mb-4">Daftar Admin Aktif</h5>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead>
+                <tr>
+                  <th>Nama</th>
+                  <th>User UID</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="adminsTableBody">
+                <tr>
+                  <td colspan="3" class="text-center text-muted py-4">
+                    <i class="fa-solid fa-spinner fa-spin me-2"></i> Memuat...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script type="module" src="assets/js/admin-guard.js"></script>
+
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import { collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    let currentUid = null;
+    let started = false;
+
+    function renderAdmins(admins) {
+      const tbody = document.getElementById('adminsTableBody');
+      if (admins.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">Belum ada admin.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = admins.map(a => {
+        const isSelf = a.id === currentUid;
+        return `
+          <tr>
+            <td class="fw-medium">${a.name || '(tanpa nama)'}${isSelf ? ' <span class="badge bg-light text-muted border">Kamu</span>' : ''}</td>
+            <td class="text-muted small" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;">${a.id}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-danger py-0 remove-admin-btn" data-id="${a.id}" data-name="${(a.name || 'admin ini').replace(/"/g, '&quot;')}" ${isSelf ? 'disabled title="Gak bisa hapus akun sendiri, biar gak ke-lockout"' : ''}>
+                <i class="fa-solid fa-user-minus"></i> Hapus
+              </button>
+            </td>
+          </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('.remove-admin-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (btn.disabled) return;
+          const id = btn.dataset.id;
+          const name = btn.dataset.name;
+          if (!confirm(`Hapus akses admin buat "${name}"? Akun Firebase Auth-nya tetap ada, cuma gak bisa masuk ke panel admin lagi.`)) return;
+          btn.disabled = true;
+          try {
+            await deleteDoc(doc(db, 'admins', id));
+          } catch (err) {
+            console.error('Gagal hapus admin:', err);
+            alert('Gagal hapus admin: ' + err.message);
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+    function startAdminPage(uid) {
+      if (started) return;
+      started = true;
+      currentUid = uid;
+
+      onSnapshot(collection(db, 'admins'), (snap) => {
+        const admins = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderAdmins(admins);
+      }, (err) => {
+        console.error('Gagal memuat daftar admin:', err);
+        document.getElementById('adminsTableBody').innerHTML =
+          `<tr><td colspan="3" class="text-center text-muted py-4">Gagal memuat data. Coba refresh halaman.</td></tr>`;
+      });
+
+      document.getElementById('addAdminForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const uidInput = document.getElementById('newAdminUid').value.trim();
+        const nameInput = document.getElementById('newAdminName').value.trim();
+        if (!uidInput) return;
+
+        const btn = document.getElementById('addAdminBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Menambahkan...';
+
+        try {
+          // setDoc dengan Document ID = UID yang diketik (bukan auto-ID) —
+          // supaya rule admin-guard.js (exists(admins/{uid})) bisa langsung
+          // ngecek berdasarkan UID login, konsisten sama pola admin pertama
+          // yang dibuat manual lewat Console.
+          await setDoc(doc(db, 'admins', uidInput), { name: nameInput, createdAt: new Date() });
+          document.getElementById('addAdminForm').reset();
+        } catch (err) {
+          console.error('Gagal tambah admin:', err);
+          alert('Gagal tambah admin: ' + err.message);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-user-plus me-2"></i>Tambah sebagai Admin';
+        }
+      });
+    }
+
+    document.addEventListener('sisarasaAdmin:authReady', (e) => {
+      if (e.detail.uid) startAdminPage(e.detail.uid);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa Admin | Kelola Toko</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="brand">
+      <i class="fa-solid fa-shield-halved"></i> Sisarasa Admin
+    </div>
+    <div class="nav flex-column">
+      <a href="index.html" class="nav-link"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+      <a href="toko.html" class="nav-link active"><i class="fa-solid fa-store"></i> Kelola Toko</a>
+      <a href="kelola-admin.html" class="nav-link"><i class="fa-solid fa-user-shield"></i> Kelola Admin</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="top-header">
+      <div>
+        <h2 class="fw-bold mb-0">Kelola Toko</h2>
+        <div class="text-muted small">Aktifkan, nonaktifkan, atau hapus toko dari platform</div>
+      </div>
+      <div class="d-flex align-items-center gap-4">
+        <div class="dropdown">
+          <div class="user-profile" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="cursor:pointer">
+            <img src="https://ui-avatars.com/api/?name=Admin&background=ff6b6b&color=fff" alt="Admin">
+            <div class="d-none d-md-block">
+              <div class="fw-bold" style="font-size:0.9rem">Admin</div>
+              <div class="text-muted" style="font-size:0.8rem">Super Admin</div>
+            </div>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end shadow" style="border-radius:12px;border:none;min-width:180px">
+            <li><a class="dropdown-item text-danger fw-bold" href="#" id="logoutBtn"><i class="fa-solid fa-right-from-bracket me-2"></i>Keluar</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="fw-bold mb-0">Semua Toko</h5>
+        <input type="text" class="form-control form-control-sm" id="searchStore" placeholder="Cari nama toko / email..." style="max-width: 260px; border-radius: 10px;">
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Nama Toko</th>
+              <th>Email</th>
+              <th>Alamat</th>
+              <th>Status</th>
+              <th>Rating</th>
+              <th>Terdaftar</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="storesTableBody">
+            <tr>
+              <td colspan="7" class="text-center text-muted py-4">
+                <i class="fa-solid fa-spinner fa-spin me-2"></i> Memuat daftar toko...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script type="module" src="assets/js/admin-guard.js"></script>
+
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import { collection, doc, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    function formatDate(ts) {
+      if (!ts) return '-';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    let allStores = [];
+    let started = false;
+
+    function renderTable(filterText) {
+      const tbody = document.getElementById('storesTableBody');
+      const filtered = !filterText ? allStores : allStores.filter(s => {
+        const haystack = `${s.name || ''} ${s.email || ''}`.toLowerCase();
+        return haystack.includes(filterText.toLowerCase());
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Tidak ada toko yang cocok.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(s => {
+        // isActive dianggap true kalau field-nya belum pernah di-set sama
+        // sekali (toko lama sebelum fitur ini ada) — biar toko lama gak
+        // tiba-tiba keliatan nonaktif tanpa pernah ada yang nonaktifin.
+        const isActive = s.isActive !== false;
+        const statusBadge = !s.setupComplete
+          ? `<span class="badge" style="background:rgba(148,163,184,0.15);color:#64748b;">Belum Setup</span>`
+          : isActive
+            ? `<span class="badge" style="background:rgba(46,204,113,0.15);color:#2ecc71;">Aktif</span>`
+            : `<span class="badge" style="background:rgba(231,76,60,0.15);color:#e74c3c;">Nonaktif</span>`;
+        const ratingText = s.ratingCount > 0 ? `${(s.ratingAvg || 0).toFixed(1)} ★ (${s.ratingCount})` : '-';
+
+        return `
+          <tr>
+            <td class="fw-medium">${s.name || '(Nama belum diisi)'}</td>
+            <td class="text-muted">${s.email || '-'}</td>
+            <td class="text-muted">${s.address || '-'}</td>
+            <td>${statusBadge}</td>
+            <td>${ratingText}</td>
+            <td class="text-muted">${formatDate(s.createdAt)}</td>
+            <td>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm ${isActive ? 'btn-outline-secondary' : 'btn-outline-success'} py-0 toggle-active-btn" data-id="${s.id}" data-active="${isActive}" title="${isActive ? 'Nonaktifkan' : 'Aktifkan'}">
+                  <i class="fa-solid ${isActive ? 'fa-pause' : 'fa-play'}"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger py-0 delete-store-btn" data-id="${s.id}" data-name="${(s.name || 'toko ini').replace(/"/g, '&quot;')}" title="Hapus toko">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+
+      // Pasang ulang event listener tiap render (innerHTML diganti total)
+      tbody.querySelectorAll('.toggle-active-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          const currentlyActive = btn.dataset.active === 'true';
+          btn.disabled = true;
+          try {
+            await updateDoc(doc(db, 'stores', id), { isActive: !currentlyActive });
+          } catch (err) {
+            console.error('Gagal ubah status toko:', err);
+            alert('Gagal ubah status toko: ' + err.message);
+            btn.disabled = false;
+          }
+        });
+      });
+
+      tbody.querySelectorAll('.delete-store-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          const name = btn.dataset.name;
+          // Konfirmasi ganda (ketik ulang nama toko) — ini operasi
+          // destruktif & TIDAK menghapus subkoleksi menus / order / magic_bags
+          // milik toko itu (Firestore gak bisa cascade-delete otomatis dari
+          // client), jadi harus bener-bener disengaja.
+          const typed = prompt(`Ini akan menghapus dokumen toko "${name}" secara permanen (menu & histori pesanan TIDAK ikut terhapus otomatis). Ketik nama toko persis buat konfirmasi:`);
+          if (typed !== name) {
+            if (typed !== null) alert('Nama tidak cocok, dibatalkan.');
+            return;
+          }
+          btn.disabled = true;
+          try {
+            await deleteDoc(doc(db, 'stores', id));
+          } catch (err) {
+            console.error('Gagal hapus toko:', err);
+            alert('Gagal hapus toko: ' + err.message);
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+    function startTokoPage() {
+      if (started) return;
+      started = true;
+
+      onSnapshot(collection(db, 'stores'), (snap) => {
+        allStores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderTable(document.getElementById('searchStore').value);
+      }, (err) => {
+        console.error('Gagal memuat daftar toko:', err);
+        document.getElementById('storesTableBody').innerHTML =
+          `<tr><td colspan="7" class="text-center text-muted py-4">Gagal memuat data. Coba refresh halaman.</td></tr>`;
+      });
+    }
+
+    document.getElementById('searchStore').addEventListener('input', (e) => {
+      renderTable(e.target.value);
+    });
+
+    document.addEventListener('sisarasaAdmin:authReady', (e) => {
+      if (e.detail.uid) startTokoPage();
+    });
+  </script>
+</body>
+</html>

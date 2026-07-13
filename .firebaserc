@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "sisarasa-3f969"
-  }
+  },
+  "targets": {
+    "sisarasa-3f969": {
+      "hosting": {
+        "admin": [
+          "sisarasa-admin"
+        ],
+        "toko": [
+          "sisarasa-3f969"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
