@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sisarasa Admin | Kelola Pesanan</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="brand">
+      <i class="fa-solid fa-shield-halved"></i> Sisarasa Admin
+    </div>
+    <div class="nav flex-column">
+      <a href="index.html" class="nav-link"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+      <a href="toko.html" class="nav-link"><i class="fa-solid fa-store"></i> Kelola Toko</a>
+      <a href="pesanan.html" class="nav-link active"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
+      <a href="kelola-admin.html" class="nav-link"><i class="fa-solid fa-user-shield"></i> Kelola Admin</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="top-header">
+      <div>
+        <h2 class="fw-bold mb-0">Kelola Pesanan</h2>
+        <div class="text-muted small">Lihat & investigasi pesanan dari SELURUH toko di platform</div>
+      </div>
+      <div class="d-flex align-items-center gap-4">
+        <div class="dropdown">
+          <div class="user-profile" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="cursor:pointer">
+            <img src="https://ui-avatars.com/api/?name=Admin&background=ff6b6b&color=fff" alt="Admin">
+            <div class="d-none d-md-block">
+              <div class="fw-bold" style="font-size:0.9rem">Admin</div>
+              <div class="text-muted" style="font-size:0.8rem">Super Admin</div>
+            </div>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end shadow" style="border-radius:12px;border:none;min-width:180px">
+            <li><a class="dropdown-item text-danger fw-bold" href="#" id="logoutBtn"><i class="fa-solid fa-right-from-bracket me-2"></i>Keluar</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h5 class="fw-bold mb-0">Semua Pesanan</h5>
+        <div class="d-flex gap-2">
+          <select class="form-select form-select-sm" id="statusFilter" style="width:auto; border-radius:10px;">
+            <option value="">Semua Status</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="completed">Selesai</option>
+            <option value="cancelled">Batal</option>
+          </select>
+          <input type="text" class="form-control form-control-sm" id="searchOrder" placeholder="Cari kode / toko / pembeli..." style="width: 240px; border-radius: 10px;">
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Kode</th>
+              <th>Toko</th>
+              <th>Pembeli</th>
+              <th>Item</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th>Waktu</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="ordersTableBody">
+            <tr>
+              <td colspan="8" class="text-center text-muted py-4">
+                <i class="fa-solid fa-spinner fa-spin me-2"></i> Memuat pesanan...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="text-muted small mt-2" id="orderCountInfo"></div>
+    </div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div class="modal fade" id="orderDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content" style="border-radius: 16px; border: none;">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold">Detail Pesanan</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="orderDetailBody"><!-- Filled by JS --></div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-light w-100" data-bs-dismiss="modal">Tutup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script type="module" src="assets/js/admin-guard.js"></script>
+
+  <script type="module">
+    import { db } from './assets/js/firebase-config.js';
+    import {
+      collection, doc, onSnapshot, deleteDoc, runTransaction
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Data pesanan itu boleh ditampilkan apa adanya (angka, kode, status) —
+    // tapi buyerName/tokoNama BISA berisi teks bebas (userEmail dipakai
+    // sebagai fallback nama, atau nama toko yang diisi mitra sendiri).
+    // Tetap di-escape sebelum masuk innerHTML, sama seperti di Kelola Toko.
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str ?? '';
+      return div.innerHTML;
+    }
+
+    function formatTime(ts) {
+      if (!ts) return '-';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    const badgeClass = { pending: 'badge-pending', confirmed: 'badge-confirmed', completed: 'badge-completed', cancelled: 'badge-cancelled' };
+    const badgeLabel = { pending: 'Pending', confirmed: 'Confirmed', completed: 'Selesai', cancelled: 'Batal' };
+
+    // Order LAMA (sebelum standar disatukan) masih bisa pakai 'selesai'/
+    // 'batal' — disamakan ke skema baru di sini biar badge & filter konsisten.
+    function normalizeStatus(raw) {
+      if (raw === 'selesai') return 'completed';
+      if (raw === 'batal') return 'cancelled';
+      return raw || 'pending';
+    }
+
+    let storeMap = {};   // storeId -> nama toko, dari collection stores
+    let allOrders = [];  // [{id, raw, storeName, buyerName, itemName, qty, totalPrice, status, createdAt}]
+    let started = false;
+
+    // Order baru sudah punya field standar (itemName/qty/totalPrice/
+    // buyerName/storeId). Order LAMA cuma punya tokoNama/namaMenu/jumlah/
+    // harga/userEmail dan sering tidak punya storeId sama sekali — makanya
+    // nama toko di-fallback ke field tokoNama (skema lama), BUKAN dianggap
+    // kosong, supaya order lama tetap bisa diidentifikasi tokonya.
+    function normalizeOrder(id, d) {
+      return {
+        id,
+        raw: d,
+        orderCode: d.orderCode || d.kodePickup || id.slice(-6).toUpperCase(),
+        storeName: (d.storeId && storeMap[d.storeId]) || d.tokoNama || '(Toko tidak diketahui)',
+        buyerName: d.buyerName || d.userEmail || '-',
+        itemName: d.itemName || d.namaMenu || d.tokoNama || 'Pesanan',
+        qty: Number(d.qty || d.jumlah || 1),
+        totalPrice: Number(d.totalPrice ?? d.harga ?? 0),
+        status: normalizeStatus(d.status),
+        createdAt: d.createdAt,
+      };
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('ordersTableBody');
+      const statusFilter = document.getElementById('statusFilter').value;
+      const search = document.getElementById('searchOrder').value.trim().toLowerCase();
+
+      let rows = allOrders;
+      if (statusFilter) rows = rows.filter(o => o.status === statusFilter);
+      if (search) {
+        rows = rows.filter(o =>
+          o.orderCode.toLowerCase().includes(search) ||
+          o.storeName.toLowerCase().includes(search) ||
+          o.buyerName.toLowerCase().includes(search)
+        );
+      }
+      rows = rows.slice().sort((a, b) => {
+        const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+        const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        return tb - ta;
+      });
+
+      document.getElementById('orderCountInfo').textContent =
+        `Menampilkan ${rows.length} dari ${allOrders.length} pesanan`;
+
+      if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Tidak ada pesanan yang cocok.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = rows.map(o => `
+        <tr>
+          <td class="fw-bold">#${escapeHtml(o.orderCode)}</td>
+          <td>${escapeHtml(o.storeName)}</td>
+          <td class="text-muted">${escapeHtml(o.buyerName)}</td>
+          <td class="text-muted small">${escapeHtml(o.itemName)} x${o.qty}</td>
+          <td class="fw-bold">Rp ${o.totalPrice.toLocaleString('id-ID')}</td>
+          <td><span class="badge ${badgeClass[o.status] || ''}">${badgeLabel[o.status] || o.status}</span></td>
+          <td class="text-muted small">${formatTime(o.createdAt)}</td>
+          <td>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-light py-0 detail-order-btn" data-id="${o.id}" title="Detail"><i class="fa-solid fa-eye"></i></button>
+              <button class="btn btn-sm btn-light text-danger py-0 delete-order-btn" data-id="${o.id}" title="Hapus"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>`).join('');
+
+      tbody.querySelectorAll('.detail-order-btn').forEach(btn => {
+        btn.addEventListener('click', () => showDetail(btn.dataset.id));
+      });
+      tbody.querySelectorAll('.delete-order-btn').forEach(btn => {
+        btn.addEventListener('click', () => promptDelete(btn.dataset.id));
+      });
+    }
+
+    function showDetail(id) {
+      const o = allOrders.find(x => x.id === id);
+      if (!o) return;
+      document.getElementById('orderDetailBody').innerHTML = `
+        <div class="mb-3 text-center">
+          <span class="badge ${badgeClass[o.status] || ''}" style="font-size:0.85rem;">${badgeLabel[o.status] || o.status}</span>
+        </div>
+        <table class="table table-sm table-borderless mb-0">
+          <tbody>
+            <tr><td class="text-muted" style="width:40%;">Kode Pesanan</td><td class="fw-bold">#${escapeHtml(o.orderCode)}</td></tr>
+            <tr><td class="text-muted">Toko</td><td>${escapeHtml(o.storeName)}</td></tr>
+            <tr><td class="text-muted">Pembeli</td><td>${escapeHtml(o.buyerName)}</td></tr>
+            <tr><td class="text-muted">Item</td><td>${escapeHtml(o.itemName)} x${o.qty}</td></tr>
+            <tr><td class="text-muted">Total</td><td class="fw-bold">Rp ${o.totalPrice.toLocaleString('id-ID')}</td></tr>
+            <tr><td class="text-muted">Kode Pickup</td><td>${escapeHtml(o.raw.kodePickup || o.raw.pickupCode || '-')}</td></tr>
+            <tr><td class="text-muted">Dibuat</td><td>${formatTime(o.createdAt)}</td></tr>
+            <tr><td class="text-muted">Order ID</td><td class="text-muted small" style="word-break:break-all;">${escapeHtml(o.id)}</td></tr>
+          </tbody>
+        </table>`;
+      new bootstrap.Modal(document.getElementById('orderDetailModal')).show();
+    }
+
+    // Hapus pesanan dari sisi admin — dipakai buat bersih-bersih data/
+    // investigasi dispute. Sama seperti di orders.html mitra: kalau
+    // pesanan yang dihapus BELUM 'completed' dan masih tertaut ke
+    // magic_bags (bagId), stoknya dikembalikan dalam 1 transaksi atomik
+    // biar gak ada barang yang "hilang" dari stok cuma gara-gara order-nya
+    // dihapus admin.
+    async function promptDelete(id) {
+      const o = allOrders.find(x => x.id === id);
+      if (!o) return;
+      if (!confirm(`Hapus pesanan #${o.orderCode} (${o.storeName})? Tindakan ini permanen.`)) return;
+
+      try {
+        const raw = o.raw;
+        const isCompleted = o.status === 'completed';
+        const bagId = raw.bagId;
+        const qty = o.qty;
+
+        if (!isCompleted && bagId) {
+          await runTransaction(db, async (tx) => {
+            const bagRef = doc(db, 'magic_bags', bagId);
+            const bagSnap = await tx.get(bagRef);
+            const orderRef = doc(db, 'orders', id);
+            if (bagSnap.exists()) {
+              const stokSekarang = Number(bagSnap.data().stok ?? 0);
+              tx.update(bagRef, { stok: stokSekarang + qty });
+            }
+            tx.delete(orderRef);
+          });
+        } else {
+          await deleteDoc(doc(db, 'orders', id));
+        }
+      } catch (err) {
+        console.error('Gagal hapus pesanan:', err);
+        alert('Gagal hapus pesanan: ' + err.message);
+      }
+    }
+
+    function startPesananPage() {
+      if (started) return;
+      started = true;
+
+      // Peta storeId -> nama toko, buat nampilin nama toko di tabel pesanan
+      // (dokumen order sendiri sering cuma punya storeId, bukan namanya).
+      onSnapshot(collection(db, 'stores'), (snap) => {
+        storeMap = {};
+        snap.forEach(d => { storeMap[d.id] = d.data().name || '(Toko tanpa nama)'; });
+        // Nama toko di allOrders yang udah ke-load duluan perlu di-refresh
+        // begitu storeMap berubah/pertama kali siap.
+        allOrders = allOrders.map(o => normalizeOrder(o.id, o.raw));
+        renderTable();
+      });
+
+      onSnapshot(collection(db, 'orders'), (snap) => {
+        allOrders = snap.docs.map(d => normalizeOrder(d.id, d.data()));
+        renderTable();
+      }, (err) => {
+        console.error('Gagal memuat pesanan:', err);
+        document.getElementById('ordersTableBody').innerHTML =
+          `<tr><td colspan="8" class="text-center text-muted py-4">Gagal memuat data. Coba refresh halaman.</td></tr>`;
+      });
+
+      document.getElementById('statusFilter').addEventListener('change', renderTable);
+      document.getElementById('searchOrder').addEventListener('input', renderTable);
+    }
+
+    document.addEventListener('sisarasaAdmin:authReady', (e) => {
+      if (e.detail.uid) startPesananPage();
+    });
+  </script>
+</body>
+</html>

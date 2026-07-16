@@ -8,9 +8,37 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/stores/$(uid));
     }
 
+    // Cek apakah user adalah admin platform (ada dokumen admins/{uid}-nya).
+    // Dipakai buat ngasih akses CRUD lintas-toko ke admin (Kelola Toko,
+    // Kelola Admin), yang gak dibuka buat mitra biasa.
+    function isAdmin(uid) {
+      return exists(/databases/$(database)/documents/admins/$(uid));
+    }
+
     // Cek apakah user adalah pemilik toko tertentu
     function isStoreOwner(uid) {
       return request.auth != null && request.auth.uid == uid;
+    }
+
+    // ─── ADMINS ─────────────────────────────────────────────────────
+    // admins/{uid} — penanda "user ini admin platform". TIDAK ADA
+    // pendaftaran lewat aplikasi sama sekali — dokumennya cuma dibuat
+    // manual lewat Firebase Console. Makanya di sini SENGAJA tidak ada
+    // allow create/update/delete apapun (default: ditolak semua).
+    match /admins/{uid} {
+      // Baca: boleh baca dokumen admin milik SENDIRI (buat admin-guard.js
+      // ngecek status login), ATAU kalau yang minta udah kebukti admin,
+      // boleh baca SEMUA dokumen admins (buat halaman Kelola Admin nampilin
+      // daftar semua admin).
+      allow read: if request.auth != null
+                  && (request.auth.uid == uid || isAdmin(request.auth.uid));
+
+      // Create/update/delete: HANYA admin yang sudah terdaftar yang boleh
+      // nambah/hapus admin lain. Tetap gak ada jalur pendaftaran admin
+      // pertama lewat aplikasi — admin PERTAMA selalu dibuat manual lewat
+      // Firebase Console, baru admin itu bisa nambah admin berikutnya
+      // lewat halaman Kelola Admin.
+      allow create, update, delete: if request.auth != null && isAdmin(request.auth.uid);
     }
 
     // ─── STORES ─────────────────────────────────────────────────────
@@ -22,8 +50,10 @@ service cloud.firestore {
       // Hanya bisa create untuk uid sendiri (saat register lewat web)
       allow create: if isStoreOwner(uid);
 
-      // Hanya pemilik toko yang boleh update/delete tokonya sendiri
-      allow update, delete: if isStoreOwner(uid);
+      // Hanya pemilik toko yang boleh update/delete tokonya sendiri.
+      // Admin platform juga boleh (Kelola Toko: aktifkan/nonaktifkan/hapus
+      // toko manapun).
+      allow update, delete: if isStoreOwner(uid) || isAdmin(request.auth.uid);
 
       // Pembeli (siapapun yang login) boleh update HANYA field agregat
       // rating (`ratingAvg`, `ratingCount`), dipicu bareng runTransaction()

@@ -20,6 +20,7 @@
     <div class="nav flex-column">
       <a href="index.html" class="nav-link"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
       <a href="toko.html" class="nav-link"><i class="fa-solid fa-store"></i> Kelola Toko</a>
+      <a href="pesanan.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
       <a href="kelola-admin.html" class="nav-link active"><i class="fa-solid fa-user-shield"></i> Kelola Admin</a>
     </div>
   </div>
@@ -111,6 +112,12 @@
     let currentUid = null;
     let started = false;
 
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str ?? '';
+      return div.innerHTML;
+    }
+
     function renderAdmins(admins) {
       const tbody = document.getElementById('adminsTableBody');
       if (admins.length === 0) {
@@ -121,8 +128,8 @@
         const isSelf = a.id === currentUid;
         return `
           <tr>
-            <td class="fw-medium">${a.name || '(tanpa nama)'}${isSelf ? ' <span class="badge bg-light text-muted border">Kamu</span>' : ''}</td>
-            <td class="text-muted small" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;">${a.id}</td>
+            <td class="fw-medium">${escapeHtml(a.name || '(tanpa nama)')}${isSelf ? ' <span class="badge bg-light text-muted border">Kamu</span>' : ''}</td>
+            <td class="text-muted small" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(a.id)}</td>
             <td>
               <button class="btn btn-sm btn-outline-danger py-0 remove-admin-btn" data-id="${a.id}" data-name="${(a.name || 'admin ini').replace(/"/g, '&quot;')}" ${isSelf ? 'disabled title="Gak bisa hapus akun sendiri, biar gak ke-lockout"' : ''}>
                 <i class="fa-solid fa-user-minus"></i> Hapus

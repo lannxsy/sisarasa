@@ -48,6 +48,8 @@ interface TokoGroup {
   lng?: number;
   storeExists?: boolean;
   jarakKm: number | null;
+  ratingAvg?: number;
+  ratingCount?: number;
 }
 
 export default function TokoScreen() {
@@ -92,7 +94,7 @@ export default function TokoScreen() {
   // menimpa foto & alamat hasil grouping dari magic_bags, supaya kartu
   // toko di list ini tampil foto TOKO (dari Pengaturan Toko), bukan foto
   // menu pertama milik toko itu.
-  const [storeDocs, setStoreDocs] = useState<Record<string, { imageUrl?: string; address?: string; isActive?: boolean } | null>>({});
+  const [storeDocs, setStoreDocs] = useState<Record<string, { imageUrl?: string; address?: string; isActive?: boolean; ratingAvg?: number; ratingCount?: number } | null>>({});
 
   useEffect(() => {
     const q = query(collection(db, 'magic_bags'), orderBy('createdAt', 'desc'));
@@ -107,9 +109,9 @@ export default function TokoScreen() {
   // lebih efisien daripada pasang onSnapshot per storeId (N query).
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'stores'), (snap) => {
-      const docs: Record<string, { imageUrl?: string; address?: string; isActive?: boolean } | null> = {};
+      const docs: Record<string, { imageUrl?: string; address?: string; isActive?: boolean; ratingAvg?: number; ratingCount?: number } | null> = {};
       snap.forEach((d) => {
-        docs[d.id] = d.data() as { imageUrl?: string; address?: string; isActive?: boolean };
+        docs[d.id] = d.data() as { imageUrl?: string; address?: string; isActive?: boolean; ratingAvg?: number; ratingCount?: number };
       });
       setStoreDocs(docs);
     });
@@ -163,6 +165,8 @@ export default function TokoScreen() {
           lng: bag.lng,
           storeExists,
           jarakKm: null,
+          ratingAvg: storeExists ? storeDoc!.ratingAvg : undefined,
+          ratingCount: storeExists ? storeDoc!.ratingCount : undefined,
         });
       }
     }
@@ -203,55 +207,69 @@ export default function TokoScreen() {
     // tokonya ditutup admin, gak peduli stoknya ada atau nggak, pembeli
     // tetap harus liat "Toko Tutup", bukan "Stok Habis".
     const redup = !item.tokoBuka || !item.adaStokTersedia;
+    const badgeLabel = !item.tokoBuka ? 'Tutup' : item.adaStokTersedia ? `${item.totalStok} tersisa` : 'Habis';
     return (
       <Pressable
         style={[
           styles.card,
           { backgroundColor: isDark ? COLORS.gray800 : COLORS.white },
-          redup && styles.cardHabis,
         ]}
         onPress={() => router.push({ pathname: '/toko-detail', params: { storeId: item.storeId } })}
       >
         <View style={styles.cardImageWrap}>
           {item.imageUrl ? (
-            <Image source={{ uri: item.imageUrl }} style={styles.cardImage} resizeMode="cover" />
+            <Image source={{ uri: item.imageUrl }} style={[styles.cardImage, redup && styles.cardImageRedup]} resizeMode="cover" />
           ) : (
-            <ThemedText style={styles.emoji}>{item.emoji}</ThemedText>
+            <View style={[styles.cardImagePlaceholder, redup && styles.cardImageRedup]}>
+              <ThemedText style={styles.emoji}>{item.emoji}</ThemedText>
+            </View>
           )}
+
+          {/* Badge stok, nempel di pojok kiri-atas foto — chip putih
+              transparan + teks berwarna (senada sama tombol favorit di
+              toko-detail), BUKAN warna solid gelap/item yang norak nempel
+              di atas foto apa aja. */}
+          <View style={styles.stockBadge}>
+            <ThemedText style={[
+              styles.stockBadgeText,
+              { color: !item.tokoBuka ? COLORS.gray600 : item.adaStokTersedia ? COLORS.primaryDark : COLORS.danger },
+            ]}>{badgeLabel}</ThemedText>
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <ThemedText style={styles.tokoName}>{item.tokoNama}</ThemedText>
+
+        <View style={styles.cardBody}>
           <ThemedText style={styles.kategori} numberOfLines={1}>
-            {item.kategoriList.join(', ')}
+            {item.kategoriList.join(' · ')}
           </ThemedText>
+          <ThemedText style={styles.tokoName} numberOfLines={1}>{item.tokoNama}</ThemedText>
+
           <View style={styles.pickupRow}>
             <Ionicons name="time-outline" size={12} color={COLORS.gray400} />
-            <ThemedText style={styles.pickupText}> {item.jamPickup}</ThemedText>
-            {item.jarakKm != null && (
-              <>
-                <ThemedText style={styles.dotSep}> · </ThemedText>
-                <Ionicons name="location-outline" size={12} color={COLORS.gray400} />
-                <ThemedText style={styles.pickupText}> {formatJarak(item.jarakKm)}</ThemedText>
-              </>
-            )}
+            <ThemedText style={styles.pickupText}> Pickup hari ini {item.jamPickup}</ThemedText>
           </View>
-          {!item.tokoBuka ? (
-            <ThemedText style={styles.habisText}>Toko Tutup</ThemedText>
-          ) : item.adaStokTersedia ? (
+
+          {item.tokoBuka && item.adaStokTersedia && (
             <ThemedText style={styles.hargaMulai}>
               Mulai Rp {item.hargaTermurah.toLocaleString('id-ID')}
             </ThemedText>
-          ) : (
-            <ThemedText style={styles.habisText}>Stok Habis</ThemedText>
           )}
-        </View>
-        <View style={{ alignItems: 'flex-end', gap: 6 }}>
-          <View style={[styles.menuBadge, redup && styles.menuBadgeHabis]}>
-            <ThemedText style={[styles.menuBadgeText, redup && styles.menuBadgeTextHabis]}>
-              {!item.tokoBuka ? 'Tutup' : `${item.totalMenu} menu`}
-            </ThemedText>
+
+          <View style={styles.footerRow}>
+            {!!item.ratingCount && (
+              <View style={styles.footerChip}>
+                <Ionicons name="star" size={12} color="#f59e0b" />
+                <ThemedText style={styles.footerChipText}>{(item.ratingAvg ?? 0).toFixed(1)}</ThemedText>
+              </View>
+            )}
+            {item.jarakKm != null && (
+              <View style={styles.footerChip}>
+                <Ionicons name="location" size={12} color={COLORS.primary} />
+                <ThemedText style={styles.footerChipText}>{formatJarak(item.jarakKm)}</ThemedText>
+              </View>
+            )}
+            <View style={{ flex: 1 }} />
+            <ThemedText style={styles.menuCountText}>{item.totalMenu} menu</ThemedText>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={COLORS.gray400} />
         </View>
       </Pressable>
     );
@@ -308,35 +326,41 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 14 },
   card: {
-    flexDirection: 'row', alignItems: 'center', borderRadius: 18,
-    padding: 12, marginBottom: 10, elevation: 2,
-    shadowColor: COLORS.gray800, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06, shadowRadius: 8,
-    backgroundColor: COLORS.white,
+    // elevation di Android SELALU render abu-abu/item, gak peduli
+    // shadowColor di-set apa (beda sama shadowColor yang cuma kepake di
+    // iOS) — makanya dibikin serendah mungkin (1) + shadowOpacity tipis,
+    // biar efeknya cuma "ngambang dikit", bukan kelihatan kayak border gelap.
+    borderRadius: 18, marginBottom: 14, elevation: 1,
+    shadowColor: '#64748b', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6,
+    backgroundColor: COLORS.white, overflow: 'hidden',
   },
-  cardHabis: { opacity: 0.55 },
   cardImageWrap: {
-    width: 56, height: 56, borderRadius: 16,
+    width: '100%', height: 140,
     backgroundColor: COLORS.primaryLight,
-    justifyContent: 'center', alignItems: 'center', marginRight: 12,
-    overflow: 'hidden',
+    justifyContent: 'center', alignItems: 'center',
   },
   cardImage: { width: '100%', height: '100%' },
-  emoji: { fontSize: 26 },
-  tokoName: { fontSize: 15, fontWeight: '700' },
-  kategori: { fontSize: 11, color: COLORS.gray400, marginTop: 2 },
-  pickupRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
-  pickupText: { fontSize: 11, color: COLORS.gray400 },
-  dotSep: { fontSize: 11, color: COLORS.gray400 },
-  hargaMulai: { fontSize: 13, fontWeight: '800', color: COLORS.primaryDark, marginTop: 4 },
-  habisText: { fontSize: 13, fontWeight: '800', color: COLORS.danger, marginTop: 4 },
-  menuBadge: {
-    backgroundColor: COLORS.accentLight,
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+  cardImagePlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.primaryLight },
+  cardImageRedup: { opacity: 0.5 },
+  emoji: { fontSize: 40 },
+  stockBadge: {
+    position: 'absolute', top: 10, left: 10,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1,
   },
-  menuBadgeHabis: { backgroundColor: '#fee2e2' },
-  menuBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.accentDark },
-  menuBadgeTextHabis: { color: COLORS.danger },
+  stockBadgeText: { fontSize: 11, fontWeight: '800' },
+  cardBody: { padding: 14 },
+  tokoName: { fontSize: 15, fontWeight: '800', marginTop: 2 },
+  kategori: { fontSize: 10.5, color: COLORS.gray400, textTransform: 'uppercase', letterSpacing: 0.3 },
+  pickupRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
+  pickupText: { fontSize: 11.5, color: COLORS.gray400 },
+  hargaMulai: { fontSize: 14, fontWeight: '800', color: COLORS.primaryDark, marginTop: 6 },
+  footerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  footerChip: { flexDirection: 'row', alignItems: 'center', gap: 3, marginRight: 12 },
+  footerChipText: { fontSize: 11.5, fontWeight: '700', color: COLORS.gray600 },
+  menuCountText: { fontSize: 11, color: COLORS.gray400, fontWeight: '600' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   emptyText: { fontSize: 14, color: COLORS.gray400 },
 });

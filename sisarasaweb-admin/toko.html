@@ -20,6 +20,7 @@
     <div class="nav flex-column">
       <a href="index.html" class="nav-link"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
       <a href="toko.html" class="nav-link active"><i class="fa-solid fa-store"></i> Kelola Toko</a>
+      <a href="pesanan.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
       <a href="kelola-admin.html" class="nav-link"><i class="fa-solid fa-user-shield"></i> Kelola Admin</a>
     </div>
   </div>
@@ -77,17 +78,50 @@
     </div>
   </div>
 
+  <!-- Store Detail Modal -->
+  <div class="modal fade" id="storeDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content" style="border-radius: 16px; border: none;">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" id="storeDetailTitle">Detail Toko</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="storeDetailBody">
+          <div class="text-center text-muted py-4"><i class="fa-solid fa-spinner fa-spin me-2"></i> Memuat...</div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-light w-100" data-bs-dismiss="modal">Tutup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script type="module" src="assets/js/admin-guard.js"></script>
 
   <script type="module">
     import { db } from './assets/js/firebase-config.js';
-    import { collection, doc, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      collection, doc, onSnapshot, updateDoc, deleteDoc,
+      getDocs, query, where, orderBy, limit
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     function formatDate(ts) {
       if (!ts) return '-';
       const d = ts.toDate ? ts.toDate() : new Date(ts);
       return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    // name/email/address diisi MITRA sendiri lewat form setup toko —
+    // bukan data terkontrol. WAJIB di-escape sebelum masuk innerHTML, biar
+    // mitra iseng gak bisa nyuntik HTML/script yang jalan di browser ADMIN.
+    // Catatan: escaping data-name di bawah cuma nutup karakter kutip dua
+    // (buat aman sebagai atribut HTML), BUKAN pengganti escapeHtml() ini —
+    // makanya dua-duanya tetap dipakai, beda tujuan.
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str ?? '';
+      return div.innerHTML;
     }
 
     let allStores = [];
@@ -119,14 +153,17 @@
 
         return `
           <tr>
-            <td class="fw-medium">${s.name || '(Nama belum diisi)'}</td>
-            <td class="text-muted">${s.email || '-'}</td>
-            <td class="text-muted">${s.address || '-'}</td>
+            <td class="fw-medium">${escapeHtml(s.name || '(Nama belum diisi)')}</td>
+            <td class="text-muted">${escapeHtml(s.email || '-')}</td>
+            <td class="text-muted">${escapeHtml(s.address || '-')}</td>
             <td>${statusBadge}</td>
             <td>${ratingText}</td>
             <td class="text-muted">${formatDate(s.createdAt)}</td>
             <td>
               <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-light py-0 detail-store-btn" data-id="${s.id}" title="Lihat detail toko">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
                 <button class="btn btn-sm ${isActive ? 'btn-outline-secondary' : 'btn-outline-success'} py-0 toggle-active-btn" data-id="${s.id}" data-active="${isActive}" title="${isActive ? 'Nonaktifkan' : 'Aktifkan'}">
                   <i class="fa-solid ${isActive ? 'fa-pause' : 'fa-play'}"></i>
                 </button>
@@ -137,6 +174,10 @@
             </td>
           </tr>`;
       }).join('');
+
+      tbody.querySelectorAll('.detail-store-btn').forEach(btn => {
+        btn.addEventListener('click', () => showStoreDetail(btn.dataset.id));
+      });
 
       // Pasang ulang event listener tiap render (innerHTML diganti total)
       tbody.querySelectorAll('.toggle-active-btn').forEach(btn => {
@@ -177,6 +218,91 @@
           }
         });
       });
+    }
+
+    // Detail toko diambil ON-DEMAND (getDocs sekali, bukan onSnapshot) pas
+    // modal dibuka — beda dari tabel utama yang real-time, karena detail
+    // ini cuma dilihat sesaat, gak perlu terus "hidup" mendengar
+    // perubahan selama modal ketutup lagi.
+    async function showStoreDetail(id) {
+      const s = allStores.find(x => x.id === id);
+      if (!s) return;
+
+      document.getElementById('storeDetailTitle').textContent = s.name || '(Nama belum diisi)';
+      const body = document.getElementById('storeDetailBody');
+      body.innerHTML = `<div class="text-center text-muted py-4"><i class="fa-solid fa-spinner fa-spin me-2"></i> Memuat detail toko...</div>`;
+      new bootstrap.Modal(document.getElementById('storeDetailModal')).show();
+
+      try {
+        const [menuSnap, orderSnap, reviewSnap] = await Promise.all([
+          getDocs(collection(db, 'stores', id, 'menus')),
+          getDocs(query(collection(db, 'orders'), where('storeId', '==', id), orderBy('createdAt', 'desc'), limit(5)))
+            .catch(() => ({ empty: true, size: 0, docs: [] })), // index composite mungkin belum ke-enable — jangan sampai bikin modal gagal total
+          getDocs(query(collection(db, 'reviews'), where('storeId', '==', id), orderBy('createdAt', 'desc'), limit(5)))
+            .catch(() => ({ empty: true, size: 0, docs: [] })),
+        ]);
+
+        const ratingText = s.ratingCount > 0 ? `${(s.ratingAvg || 0).toFixed(1)} ★ (${s.ratingCount} ulasan)` : 'Belum ada ulasan';
+
+        let menuHtml = '<p class="text-muted small mb-0">Belum ada menu.</p>';
+        if (!menuSnap.empty) {
+          menuHtml = '<div class="table-responsive"><table class="table table-sm"><tbody>' +
+            menuSnap.docs.map(d => {
+              const m = d.data();
+              return `<tr>
+                <td>${escapeHtml(m.name || m.namaMenu || '-')}</td>
+                <td class="text-muted small">Stok: ${m.stock ?? '-'}</td>
+                <td class="text-end fw-medium">Rp ${Number(m.price ?? m.harga ?? 0).toLocaleString('id-ID')}</td>
+              </tr>`;
+            }).join('') + '</tbody></table></div>';
+        }
+
+        let orderHtml = '<p class="text-muted small mb-0">Belum ada pesanan.</p>';
+        if (!orderSnap.empty) {
+          orderHtml = orderSnap.docs.map(d => {
+            const o = d.data();
+            const buyer = o.buyerName || o.userEmail || '-';
+            const item = o.itemName || o.namaMenu || 'Pesanan';
+            const total = Number(o.totalPrice ?? o.harga ?? 0);
+            return `<div class="d-flex justify-content-between border-bottom py-1">
+              <span class="small">${escapeHtml(buyer)} — ${escapeHtml(item)}</span>
+              <span class="small fw-medium">Rp ${total.toLocaleString('id-ID')}</span>
+            </div>`;
+          }).join('');
+        }
+
+        let reviewHtml = '<p class="text-muted small mb-0">Belum ada ulasan.</p>';
+        if (!reviewSnap.empty) {
+          reviewHtml = reviewSnap.docs.map(d => {
+            const r = d.data();
+            const stars = '★'.repeat(r.rating || 0) + '☆'.repeat(5 - (r.rating || 0));
+            return `<div class="border-bottom py-1">
+              <div class="small fw-medium">${escapeHtml(r.userName || 'Pembeli')} <span class="text-warning">${stars}</span></div>
+              ${r.comment ? `<div class="text-muted small">${escapeHtml(r.comment)}</div>` : ''}
+            </div>`;
+          }).join('');
+        }
+
+        body.innerHTML = `
+          <div class="row g-3 mb-3">
+            <div class="col-6"><div class="text-muted small">Email</div><div>${escapeHtml(s.email || '-')}</div></div>
+            <div class="col-6"><div class="text-muted small">Rating</div><div>${ratingText}</div></div>
+            <div class="col-12"><div class="text-muted small">Alamat</div><div>${escapeHtml(s.address || '-')}</div></div>
+          </div>
+          <hr>
+          <h6 class="fw-bold mb-2">Menu (${menuSnap.size})</h6>
+          ${menuHtml}
+          <hr>
+          <h6 class="fw-bold mb-2">Pesanan Terbaru</h6>
+          ${orderHtml}
+          <hr>
+          <h6 class="fw-bold mb-2">Ulasan Terbaru</h6>
+          ${reviewHtml}
+        `;
+      } catch (err) {
+        console.error('Gagal memuat detail toko:', err);
+        body.innerHTML = `<p class="text-danger small mb-0">Gagal memuat sebagian data detail toko. Coba lagi.</p>`;
+      }
     }
 
     function startTokoPage() {

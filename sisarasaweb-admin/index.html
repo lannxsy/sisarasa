@@ -20,6 +20,7 @@
     <div class="nav flex-column">
       <a href="index.html" class="nav-link active"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
       <a href="toko.html" class="nav-link"><i class="fa-solid fa-store"></i> Kelola Toko</a>
+      <a href="pesanan.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
       <a href="kelola-admin.html" class="nav-link"><i class="fa-solid fa-user-shield"></i> Kelola Admin</a>
     </div>
   </div>
@@ -58,7 +59,7 @@
             </div>
             <div class="stat-icon icon-purple"><i class="fa-solid fa-store"></i></div>
           </div>
-          <div class="text-muted" id="statActiveStores" style="font-size: 0.85rem;">Memuat...</div>
+          <div id="statStoreBreakdown" style="font-size: 0.78rem;">Memuat...</div>
         </div>
       </div>
 
@@ -71,7 +72,7 @@
             </div>
             <div class="stat-icon icon-orange"><i class="fa-solid fa-cart-shopping"></i></div>
           </div>
-          <div class="text-muted" style="font-size: 0.85rem;">Seluruh toko, sepanjang waktu</div>
+          <div id="statOrderBreakdown" style="font-size: 0.78rem;">Memuat...</div>
         </div>
       </div>
 
@@ -98,6 +99,25 @@
             <div class="stat-icon icon-blue"><i class="fa-solid fa-star"></i></div>
           </div>
           <div class="text-muted" id="statRatingCount" style="font-size: 0.85rem;">Memuat...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tren Omzet & Toko Perlu Perhatian -->
+    <div class="row g-4 mb-4">
+      <div class="col-lg-8">
+        <div class="table-container h-100">
+          <h5 class="fw-bold mb-4">Tren Omzet Platform (7 Hari Terakhir)</h5>
+          <canvas id="revenueChart" height="100"></canvas>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="table-container h-100">
+          <h5 class="fw-bold mb-1">Toko dengan Omzet Tertinggi</h5>
+          <p class="text-muted small mb-3">Top 5, dari pesanan Selesai sepanjang waktu</p>
+          <div id="topStoresList" style="max-height: 320px; overflow-y: auto;">
+            <div class="text-center text-muted py-3"><i class="fa-solid fa-spinner fa-spin"></i> Memuat...</div>
+          </div>
         </div>
       </div>
     </div>
@@ -133,6 +153,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script type="module" src="assets/js/admin-guard.js"></script>
 
   <script type="module">
@@ -149,7 +170,78 @@
       return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
     }
 
+    // name/email/address di dokumen stores itu diisi MITRA sendiri lewat
+    // form setup toko — bukan data terkontrol. WAJIB di-escape sebelum
+    // masuk innerHTML, biar mitra iseng gak bisa nyuntik HTML/script yang
+    // jalan di browser ADMIN (yang punya akses hapus/nonaktifkan toko &
+    // kelola admin lain — jauh lebih berbahaya kalau kena XSS di sini
+    // dibanding di halaman mitra biasa).
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str ?? '';
+      return div.innerHTML;
+    }
+
+    // Chart digambar ulang tiap kali data order berubah (real-time), bukan
+    // sekali pas halaman load. Instance lama di-destroy dulu, biar Chart.js
+    // gak numpuk canvas/listener tiap kali onSnapshot fire.
+    let revenueChartInstance = null;
+    function renderRevenueChart(labels, data) {
+      const ctx = document.getElementById('revenueChart');
+      if (!ctx) return;
+      if (revenueChartInstance) revenueChartInstance.destroy();
+      revenueChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Omzet Platform (Rp)',
+            data,
+            borderColor: '#ff6b6b',
+            backgroundColor: 'rgba(255, 107, 107, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true } },
+        },
+      });
+    }
+
+    // Nama & rating toko buat leaderboard omzet — diambil dari allStores
+    // (cache dari listener stores), bukan query ulang.
+    function renderTopStores(revenueByStore) {
+      const el = document.getElementById('topStoresList');
+      const ranked = Object.entries(revenueByStore)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      if (ranked.length === 0) {
+        el.innerHTML = `<p class="text-muted text-center small py-3">Belum ada pesanan Selesai dari toko manapun.</p>`;
+        return;
+      }
+
+      const medalColor = ['#f59e0b', '#94a3b8', '#c2703d'];
+      el.innerHTML = ranked.map(([storeId, revenue], i) => {
+        const store = allStores.find(s => s.id === storeId);
+        const name = store ? (store.name || '(Tanpa nama)') : '(Toko dihapus)';
+        return `
+          <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+            <div class="d-flex align-items-center gap-2">
+              <span class="fw-bold" style="width:18px; ${i < 3 ? `color:${medalColor[i]}` : 'color:#94a3b8'}">${i + 1}</span>
+              <span class="fw-medium" style="font-size:0.85rem;">${escapeHtml(name)}</span>
+            </div>
+            <span class="fw-bold text-success" style="font-size:0.85rem;">${formatRupiah(revenue)}</span>
+          </div>`;
+      }).join('');
+    }
+
     let allStores = [];
+    let revenueByStoreCache = {}; // storeId -> total omzet (completed), diisi listener orders
     let started = false;
 
     function renderStoresTable() {
@@ -181,9 +273,9 @@
         const ratingText = s.ratingCount > 0 ? `${(s.ratingAvg || 0).toFixed(1)} ★ (${s.ratingCount})` : '-';
         return `
           <tr>
-            <td class="fw-medium">${s.name || '(Nama belum diisi)'}</td>
-            <td class="text-muted">${s.email || '-'}</td>
-            <td class="text-muted">${s.address || '-'}</td>
+            <td class="fw-medium">${escapeHtml(s.name || '(Nama belum diisi)')}</td>
+            <td class="text-muted">${escapeHtml(s.email || '-')}</td>
+            <td class="text-muted">${escapeHtml(s.address || '-')}</td>
             <td>${statusBadge}</td>
             <td>${ratingText}</td>
             <td class="text-muted">${formatDate(s.createdAt)}</td>
@@ -200,8 +292,14 @@
         allStores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
         document.getElementById('statTotalStores').textContent = allStores.length;
-        const activeCount = allStores.filter(s => s.setupComplete).length;
-        document.getElementById('statActiveStores').textContent = `${activeCount} toko aktif (sudah setup)`;
+
+        const belumSetupCount = allStores.filter(s => !s.setupComplete).length;
+        const aktifCount = allStores.filter(s => s.setupComplete && s.isActive !== false).length;
+        const nonaktifCount = allStores.filter(s => s.setupComplete && s.isActive === false).length;
+        document.getElementById('statStoreBreakdown').innerHTML =
+          `<span class="text-success fw-medium">${aktifCount} Aktif</span>` +
+          ` · <span class="text-danger fw-medium">${nonaktifCount} Nonaktif</span>` +
+          ` · <span class="text-muted">${belumSetupCount} Belum Setup</span>`;
 
         const ratedStores = allStores.filter(s => s.ratingCount > 0);
         const avgRating = ratedStores.length
@@ -213,6 +311,7 @@
           : 'Belum ada toko yang punya ulasan';
 
         renderStoresTable();
+        renderTopStores(revenueByStoreCache);
       }, (err) => {
         console.error('Gagal memuat daftar toko:', err);
         document.getElementById('storesTableBody').innerHTML =
@@ -222,15 +321,70 @@
       // ── Semua pesanan (lintas toko) ──────────────────────────────────────
       onSnapshot(collection(db, 'orders'), (snap) => {
         let revenue = 0;
+        const statusCount = { pending: 0, confirmed: 0, completed: 0, cancelled: 0 };
+        // Omzet per toko buat leaderboard "Toko dengan Omzet Tertinggi" —
+        // cuma bisa dihitung dari order yang punya storeId. Order LAMA
+        // (skema sebelum storeId konsisten diisi) gak ikut ke leaderboard
+        // ini walau tetap ikut dihitung ke revenue TOTAL di atas — gak ada
+        // cara aman buat tau itu punya toko mana dari sisi admin.
+        const revenueByStore = {};
+
+        // Omzet 7 hari terakhir (Senin–Minggu minggu berjalan), lintas SEMUA
+        // toko — sama pola kayak chart di dashboard mitra, cuma sumbernya
+        // gak difilter storeId di sini.
+        function localDateKey(date) {
+          const y = date.getFullYear();
+          const m = String(date.getMonth() + 1).padStart(2, '0');
+          const dd = String(date.getDate()).padStart(2, '0');
+          return `${y}-${m}-${dd}`;
+        }
+        const dayLabels = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+        const revenueByDay = {};
+        const dayKeys = [];
+        const dayLabelByKey = {};
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dayOfWeek = today.getDay();
+        const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - diffToMonday);
+        for (let i = 0; i <= 6; i++) {
+          const d = new Date(monday);
+          d.setDate(monday.getDate() + i);
+          const key = localDateKey(d);
+          dayKeys.push(key);
+          dayLabelByKey[key] = dayLabels[d.getDay()];
+          revenueByDay[key] = 0;
+        }
+
         snap.forEach(docSnap => {
           const d = docSnap.data();
-          const status = d.status || 'pending';
-          if (status === 'completed' || status === 'selesai') {
-            revenue += Number(d.totalPrice ?? d.harga ?? 0);
+          const status = d.status === 'selesai' ? 'completed' : d.status === 'batal' ? 'cancelled' : (d.status || 'pending');
+          if (statusCount[status] !== undefined) statusCount[status]++;
+
+          if (status === 'completed') {
+            const price = Number(d.totalPrice ?? d.harga ?? 0);
+            revenue += price;
+            if (d.storeId) revenueByStore[d.storeId] = (revenueByStore[d.storeId] || 0) + price;
+            const createdDate = d.createdAt?.toDate ? d.createdAt.toDate() : null;
+            if (createdDate) {
+              const key = localDateKey(createdDate);
+              if (key in revenueByDay) revenueByDay[key] += price;
+            }
           }
         });
+
+        revenueByStoreCache = revenueByStore;
+        renderTopStores(revenueByStoreCache);
+
         document.getElementById('statTotalOrders').textContent = snap.size;
         document.getElementById('statTotalRevenue').textContent = formatRupiah(revenue);
+        document.getElementById('statOrderBreakdown').innerHTML =
+          `<span class="text-warning fw-medium">${statusCount.pending} Pending</span>` +
+          ` · <span class="text-success fw-medium">${statusCount.completed} Selesai</span>` +
+          ` · <span class="text-danger fw-medium">${statusCount.cancelled} Batal</span>`;
+
+        renderRevenueChart(dayKeys.map(k => dayLabelByKey[k]), dayKeys.map(k => revenueByDay[k]));
       }, (err) => {
         console.error('Gagal memuat data pesanan:', err);
       });
