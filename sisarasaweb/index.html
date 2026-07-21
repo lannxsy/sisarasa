@@ -380,9 +380,15 @@
 
           if (isToday) {
             todayCount++;
-            menuSold += d.qty;
             if (d.status === 'pending') pendingCount++;
-            todayItemQty[d.itemName] = (todayItemQty[d.itemName] || 0) + d.qty;
+            // "Menu Terjual" & "Menu Terlaris" HARUS cuma ngitung pesanan
+            // yang beneran Selesai. Sebelumnya qty ditambahin buat SEMUA
+            // status (termasuk cancelled/batal), jadi pesanan yang ditolak
+            // masih keitung "terjual" — padahal barangnya gak pernah keluar.
+            if (isSelesai) {
+              menuSold += d.qty;
+              todayItemQty[d.itemName] = (todayItemQty[d.itemName] || 0) + d.qty;
+            }
           }
 
           // Akumulasi omzet harian buat chart (7 hari terakhir, status

@@ -193,6 +193,63 @@
       return { potongan, bersih: totalPrice - potongan, kenaKomisi };
     }
 
+    // ── Kembalikan stok (dipakai buat cancel/reject DAN hapus pesanan) ────────
+    // PENTING: stok itu tersimpan di DUA tempat yang harus selalu sinkron:
+    //   1. magic_bags/{bagId}.stok        -> dipakai app pembeli
+    //   2. stores/{storeId}/menus/{id}.stock -> dipakai halaman Kelola Menu
+    // Sebelumnya restore stok cuma nyentuh magic_bags, jadi angka di Kelola
+    // Menu gak pernah balik walau stok yang dilihat pembeli udah bener.
+    // `newStatus` diisi 'cancelled' buat cancel/reject, atau null kalau
+    // order-nya mau DIHAPUS (bukan sekadar diubah statusnya).
+    async function restoreStockAndFinalize(orderId, newStatus) {
+      const raw = ordersCache[orderId];
+      const bagId = raw?.bagId;
+      const storeId = raw?.storeId;
+      const qty = Number(raw?.qty ?? raw?.jumlah ?? 1);
+      // Stok CUMA dikembalikan kalau order belum pernah completed/cancelled
+      // sebelumnya — order yang sudah completed berarti barangnya sudah
+      // benar-benar diambil pembeli (jangan ditambah lagi), dan order yang
+      // sudah cancelled berarti stoknya sudah pernah dikembalikan sekali.
+      const sudahFinal = raw?.status === 'completed' || raw?.status === 'selesai'
+                        || raw?.status === 'cancelled' || raw?.status === 'batal';
+
+      const orderRef = doc(db, 'orders', orderId);
+
+      if (!sudahFinal && bagId) {
+        await runTransaction(db, async (tx) => {
+          const bagRef = doc(db, 'magic_bags', bagId);
+          const bagSnap = await tx.get(bagRef);
+
+          // Cari dokumen menu yang terhubung (kalau ada) SEBELUM nulis apa
+          // pun — semua tx.get() Firestore wajib dijalankan sebelum tx.set/
+          // tx.update di transaction yang sama.
+          let menuRef = null, menuSnap = null;
+          if (bagSnap.exists() && bagSnap.data().menuDocId && storeId) {
+            menuRef = doc(db, 'stores', storeId, 'menus', bagSnap.data().menuDocId);
+            menuSnap = await tx.get(menuRef);
+          }
+
+          if (bagSnap.exists()) {
+            const stokSekarang = Number(bagSnap.data().stok ?? 0);
+            tx.update(bagRef, { stok: stokSekarang + qty });
+          }
+          // Menu lama (dibuat sebelum fix sinkronisasi stok) mungkin gak
+          // punya menuDocId di magic_bags-nya — kalau gitu, cuma magic_bags
+          // yang ke-update, sama seperti sebelumnya.
+          if (menuRef && menuSnap && menuSnap.exists()) {
+            const stockMenuSekarang = Number(menuSnap.data().stock ?? 0);
+            tx.update(menuRef, { stock: stockMenuSekarang + qty });
+          }
+
+          if (newStatus) tx.update(orderRef, { status: newStatus });
+          else tx.delete(orderRef);
+        });
+      } else {
+        if (newStatus) await updateDoc(orderRef, { status: newStatus });
+        else await deleteDoc(orderRef);
+      }
+    }
+
     // ── Render row ────────────────────────────────────────────────────────────
     function renderRow(id, n) {
       const cls = badgeClass[n.status] || '';
@@ -285,7 +342,11 @@
     window.changeStatus = async function(id, selectEl) {
       const newStatus = selectEl.value;
       try {
-        await updateDoc(doc(db, 'orders', id), { status: newStatus });
+        if (newStatus === 'cancelled') {
+          await restoreStockAndFinalize(id, 'cancelled');
+        } else {
+          await updateDoc(doc(db, 'orders', id), { status: newStatus });
+        }
       } catch (err) {
         alert('Gagal mengubah status: ' + err.message);
       }
@@ -304,39 +365,10 @@
     document.getElementById('confirmDeleteOrderBtn').addEventListener('click', async () => {
       if (!orderToDelete) return;
       try {
-        const raw = ordersCache[orderToDelete];
-        // Stok dikembalikan HANYA kalau order yang dihapus belum 'completed'
-        // (masih pending/confirmed, atau sudah cancelled). Kalau sudah
-        // completed, barangnya memang sudah benar-benar diambil pembeli,
-        // jadi stok TIDAK boleh ditambah lagi — itu kebalikannya, dobel
-        // tambah stok buat barang yang udah keluar dari toko.
-        const isCompleted = raw?.status === 'completed' || raw?.status === 'selesai';
-        const bagId = raw?.bagId;
-        const qty = Number(raw?.qty ?? raw?.jumlah ?? 1);
-
-        if (!isCompleted && bagId) {
-          // runTransaction: hapus order DAN kembalikan stok dalam satu
-          // operasi atomik. Kalau salah satu gagal, dua-duanya batal —
-          // gak akan ada kondisi order kehapus tapi stok gak balik, atau
-          // sebaliknya.
-          await runTransaction(db, async (tx) => {
-            const bagRef = doc(db, 'magic_bags', bagId);
-            const bagSnap = await tx.get(bagRef);
-            const orderRef = doc(db, 'orders', orderToDelete);
-
-            if (bagSnap.exists()) {
-              const stokSekarang = Number(bagSnap.data().stok ?? 0);
-              tx.update(bagRef, { stok: stokSekarang + qty });
-            }
-            // Kalau bagSnap gak exists (menu udah dihapus duluan), stok
-            // gak perlu dibalikin — cuma hapus order-nya aja.
-            tx.delete(orderRef);
-          });
-        } else {
-          // Order completed (atau gak punya bagId) — hapus biasa, tanpa restore stok.
-          await deleteDoc(doc(db, 'orders', orderToDelete));
-        }
-
+        // Pakai helper yang sama dengan cancel/reject, supaya restore stok
+        // (magic_bags DAN stores/.../menus) selalu konsisten di semua jalur,
+        // bukan cuma di-handle terpisah-pisah tiap tombol.
+        await restoreStockAndFinalize(orderToDelete, null);
         bootstrap.Modal.getInstance(document.getElementById('deleteOrderModal')).hide();
         orderToDelete = null;
       } catch (err) {
@@ -452,7 +484,11 @@
 
     document.getElementById('rejectOrderBtn').addEventListener('click', async () => {
       if (!currentDetailOrderId) return;
-      await updateDoc(doc(db, 'orders', currentDetailOrderId), { status: 'cancelled' });
+      try {
+        await restoreStockAndFinalize(currentDetailOrderId, 'cancelled');
+      } catch (err) {
+        alert('Gagal menolak pesanan: ' + err.message);
+      }
       detailModal.hide();
     });
 
