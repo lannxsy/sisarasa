@@ -96,37 +96,6 @@
       </div>
     </div>
 
-    <!-- Rincian potongan admin: transparansi penuh, biar mitra tau persis
-         omzet kotor vs berapa yang kepotong komisi, bukan cuma angka bersih
-         doang. -->
-    <div class="row g-4 mb-4">
-      <div class="col-md-6 col-lg-4">
-        <div class="stat-card">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-              <div class="text-muted mb-1" style="font-size: 0.9rem;">Omzet Kotor</div>
-              <h3 class="fw-bold mb-0" id="repRevenueGross">-</h3>
-            </div>
-            <div class="stat-icon icon-blue"><i class="fa-solid fa-cash-register"></i></div>
-          </div>
-          <div class="text-muted" style="font-size: 0.85rem;">Sebelum dipotong komisi admin</div>
-        </div>
-      </div>
-
-      <div class="col-md-6 col-lg-4">
-        <div class="stat-card">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-              <div class="text-muted mb-1" style="font-size: 0.9rem;">Total Potongan Admin</div>
-              <h3 class="fw-bold mb-0 text-danger" id="repCommission">-</h3>
-            </div>
-            <div class="stat-icon icon-orange"><i class="fa-solid fa-percent"></i></div>
-          </div>
-          <div class="text-muted" style="font-size: 0.85rem;" id="repCommissionRule">Komisi 5%, hanya untuk transaksi ≥ Rp50.000</div>
-        </div>
-      </div>
-    </div>
-
     <div class="row g-4">
       <!-- Menu Terlaris -->
       <div class="col-lg-6">
@@ -260,8 +229,6 @@
         });
 
         document.getElementById('repRevenue').textContent = formatRupiah(revenueNet);
-        document.getElementById('repRevenueGross').textContent = formatRupiah(revenueGross);
-        document.getElementById('repCommission').textContent = '- ' + formatRupiah(totalPotongan);
         document.getElementById('repCompleted').textContent = completedCount;
         document.getElementById('repCancelled').textContent = cancelledCount;
 
