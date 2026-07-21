@@ -182,6 +182,17 @@
       return d.toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' });
     }
 
+    // Komisi admin platform: 5%, HANYA dipotong dari transaksi senilai
+    // Rp50.000 ke atas — sama aturannya dengan index.html/laporan.html,
+    // dipakai buat nampilin rincian potongan per pesanan di modal detail.
+    const KOMISI_PERSEN = 5;
+    const BATAS_KOMISI = 50000;
+    function hitungOmzetBersih(totalPrice) {
+      const kenaKomisi = totalPrice >= BATAS_KOMISI;
+      const potongan = kenaKomisi ? Math.round(totalPrice * (KOMISI_PERSEN / 100)) : 0;
+      return { potongan, bersih: totalPrice - potongan, kenaKomisi };
+    }
+
     // ── Render row ────────────────────────────────────────────────────────────
     function renderRow(id, n) {
       const cls = badgeClass[n.status] || '';
@@ -389,6 +400,29 @@
         <div class="d-flex justify-content-between mb-4">
           <div class="fw-bold">Total Pembayaran</div>
           <div class="fw-bold fs-5" style="color:var(--primary-color)">Rp ${Number(n.totalPrice || 0).toLocaleString('id-ID')}</div>
+        </div>
+
+        <h6 class="fw-bold mb-2">Potongan Admin</h6>
+        <div class="bg-light p-3 rounded mb-4">
+          ${(() => {
+            const { potongan, bersih, kenaKomisi } = hitungOmzetBersih(n.totalPrice || 0);
+            if (!kenaKomisi) {
+              return `<div class="text-muted small">Tidak kena potongan — transaksi di bawah Rp50.000.</div>
+                <div class="d-flex justify-content-between mt-2">
+                  <div class="fw-bold">Diterima Toko</div>
+                  <div class="fw-bold text-success">Rp ${bersih.toLocaleString('id-ID')}</div>
+                </div>`;
+            }
+            return `
+              <div class="d-flex justify-content-between mb-1">
+                <div class="text-muted small">Komisi Admin (${KOMISI_PERSEN}%)</div>
+                <div class="text-danger small">- Rp ${potongan.toLocaleString('id-ID')}</div>
+              </div>
+              <div class="d-flex justify-content-between">
+                <div class="fw-bold">Diterima Toko</div>
+                <div class="fw-bold text-success">Rp ${bersih.toLocaleString('id-ID')}</div>
+              </div>`;
+          })()}
         </div>
 
         <h6 class="fw-bold mb-2">Kode Pickup</h6>

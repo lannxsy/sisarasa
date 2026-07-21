@@ -110,14 +110,14 @@
         <div class="stat-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-              <div class="text-muted mb-1" style="font-size: 0.9rem;">Omzet (Selesai)</div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Omzet Bersih (Selesai)</div>
               <h3 class="fw-bold mb-0" id="statRevenue">-</h3>
             </div>
             <div class="stat-icon icon-purple">
               <i class="fa-solid fa-wallet"></i>
             </div>
           </div>
-          <div class="text-muted" style="font-size: 0.85rem;">Pesanan berstatus Selesai</div>
+          <div class="text-muted" style="font-size: 0.85rem;">Sudah dipotong komisi 5% (transaksi ≥ Rp50rb)</div>
         </div>
       </div>
     </div>
@@ -126,7 +126,7 @@
     <div class="row g-4">
       <div class="col-lg-8">
         <div class="table-container">
-          <h5 class="fw-bold mb-4">Tren Omzet Mingguan</h5>
+          <h5 class="fw-bold mb-4">Tren Omzet Bersih Mingguan</h5>
           <canvas id="revenueChart" height="100"></canvas>
         </div>
       </div>
@@ -179,6 +179,19 @@
       return 'Rp ' + n.toLocaleString('id-ID');
     }
 
+    // Komisi admin platform: 5%, HANYA dipotong dari transaksi senilai
+    // Rp50.000 ke atas. Transaksi di bawah itu gak kena potongan sama
+    // sekali (bersih = totalPrice penuh). Dipakai buat nampilin "Omzet
+    // Bersih" di dashboard toko — angka yang beneran diterima mitra,
+    // bukan omzet kotor sebelum dipotong.
+    const KOMISI_PERSEN = 5;
+    const BATAS_KOMISI = 50000;
+    function hitungOmzetBersih(totalPrice) {
+      const kenaKomisi = totalPrice >= BATAS_KOMISI;
+      const potongan = kenaKomisi ? Math.round(totalPrice * (KOMISI_PERSEN / 100)) : 0;
+      return { potongan, bersih: totalPrice - potongan, kenaKomisi };
+    }
+
     function timeAgo(ts) {
       if (!ts) return '';
       const d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -203,7 +216,7 @@
         data: {
           labels,
           datasets: [{
-            label: 'Omzet (Rp)',
+            label: 'Omzet Bersih (Rp)',
             data,
             borderColor: '#ff6b6b',
             backgroundColor: 'rgba(255, 107, 107, 0.1)',
@@ -360,7 +373,10 @@
           // sepanjang waktu, bukan cuma hari ini — makanya di luar blok
           // isToday. Kalau cuma dihitung pas isToday, order Selesai dari
           // hari-hari sebelumnya gak pernah keitung dan card selalu Rp 0.
-          if (isSelesai) totalRevenue += d.totalPrice;
+          // Dihitung BERSIH (sudah dipotong komisi admin 5% kalau
+          // transaksinya ≥ Rp50rb) — bukan omzet kotor — supaya angka
+          // yang ditampilkan ke mitra memang yang beneran diterima.
+          if (isSelesai) totalRevenue += hitungOmzetBersih(d.totalPrice).bersih;
 
           if (isToday) {
             todayCount++;
@@ -369,10 +385,12 @@
             todayItemQty[d.itemName] = (todayItemQty[d.itemName] || 0) + d.qty;
           }
 
-          // Akumulasi omzet harian buat chart (7 hari terakhir, status completed saja)
+          // Akumulasi omzet harian buat chart (7 hari terakhir, status
+          // completed saja) — juga dihitung BERSIH, konsisten sama stat
+          // card "Omzet Bersih" di atas.
           if (isSelesai && createdDate) {
             const key = localDateKey(createdDate);
-            if (key in revenueByDay) revenueByDay[key] += d.totalPrice;
+            if (key in revenueByDay) revenueByDay[key] += hitungOmzetBersih(d.totalPrice).bersih;
           }
 
           // Recent orders list (max 5)

@@ -80,12 +80,12 @@
         <div class="stat-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-              <div class="text-muted mb-1" style="font-size: 0.9rem;">Pendapatan Admin (10%)</div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Pendapatan Admin (5%)</div>
               <h3 class="fw-bold mb-0" id="statTotalRevenue">-</h3>
             </div>
             <div class="stat-icon icon-green"><i class="fa-solid fa-wallet"></i></div>
           </div>
-          <div class="text-muted" style="font-size: 0.85rem;">10% dari pesanan berstatus Selesai</div>
+          <div class="text-muted" style="font-size: 0.85rem;">5% dari transaksi Selesai ≥ Rp50rb</div>
         </div>
       </div>
 
@@ -162,6 +162,16 @@
 
     function formatRupiah(n) {
       return 'Rp ' + Math.round(n || 0).toLocaleString('id-ID');
+    }
+
+    // Komisi admin platform: 5%, HANYA dipotong dari transaksi senilai
+    // Rp50.000 ke atas — dihitung PER TRANSAKSI (bukan flat 5% dari total
+    // omzet gabungan), supaya transaksi kecil di bawah Rp50rb gak ikut
+    // kena potongan sama sekali.
+    const KOMISI_PERSEN = 5;
+    const BATAS_KOMISI = 50000;
+    function komisiTransaksi(totalPrice) {
+      return totalPrice >= BATAS_KOMISI ? Math.round(totalPrice * (KOMISI_PERSEN / 100)) : 0;
     }
 
     function formatDate(ts) {
@@ -357,6 +367,8 @@
           revenueByDay[key] = 0;
         }
 
+        let adminIncome = 0; // akumulasi komisi PER transaksi, bukan persentase dari total gabungan
+
         snap.forEach(docSnap => {
           const d = docSnap.data();
           const status = d.status === 'selesai' ? 'completed' : d.status === 'batal' ? 'cancelled' : (d.status || 'pending');
@@ -365,6 +377,7 @@
           if (status === 'completed') {
             const price = Number(d.totalPrice ?? d.harga ?? 0);
             revenue += price;
+            adminIncome += komisiTransaksi(price);
             if (d.storeId) revenueByStore[d.storeId] = (revenueByStore[d.storeId] || 0) + price;
             const createdDate = d.createdAt?.toDate ? d.createdAt.toDate() : null;
             if (createdDate) {
@@ -378,7 +391,10 @@
         renderTopStores(revenueByStoreCache);
 
         document.getElementById('statTotalOrders').textContent = snap.size;
-        document.getElementById('statTotalRevenue').textContent = formatRupiah(revenue * 0.1); // komisi admin 10%, bukan omzet kotor
+        // Komisi 5% cuma dipotong dari transaksi ≥ Rp50rb, dihitung satu-
+        // satu per pesanan (bukan 5% dari total omzet gabungan) — supaya
+        // pesanan-pesanan kecil di bawah Rp50rb gak ikut nyumbang komisi.
+        document.getElementById('statTotalRevenue').textContent = formatRupiah(adminIncome);
         document.getElementById('statOrderBreakdown').innerHTML =
           `<span class="text-warning fw-medium">${statusCount.pending} Pending</span>` +
           ` · <span class="text-success fw-medium">${statusCount.completed} Selesai</span>` +

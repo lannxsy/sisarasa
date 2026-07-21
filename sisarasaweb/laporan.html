@@ -47,12 +47,12 @@
         <div class="stat-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-              <div class="text-muted mb-1" style="font-size: 0.9rem;">Total Omzet</div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Omzet Bersih</div>
               <h3 class="fw-bold mb-0" id="repRevenue">-</h3>
             </div>
             <div class="stat-icon icon-purple"><i class="fa-solid fa-wallet"></i></div>
           </div>
-          <div class="text-muted" style="font-size: 0.85rem;">Seluruh pesanan Selesai</div>
+          <div class="text-muted" style="font-size: 0.85rem;">Sudah dipotong komisi admin</div>
         </div>
       </div>
 
@@ -96,6 +96,37 @@
       </div>
     </div>
 
+    <!-- Rincian potongan admin: transparansi penuh, biar mitra tau persis
+         omzet kotor vs berapa yang kepotong komisi, bukan cuma angka bersih
+         doang. -->
+    <div class="row g-4 mb-4">
+      <div class="col-md-6 col-lg-4">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Omzet Kotor</div>
+              <h3 class="fw-bold mb-0" id="repRevenueGross">-</h3>
+            </div>
+            <div class="stat-icon icon-blue"><i class="fa-solid fa-cash-register"></i></div>
+          </div>
+          <div class="text-muted" style="font-size: 0.85rem;">Sebelum dipotong komisi admin</div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-4">
+        <div class="stat-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Total Potongan Admin</div>
+              <h3 class="fw-bold mb-0 text-danger" id="repCommission">-</h3>
+            </div>
+            <div class="stat-icon icon-orange"><i class="fa-solid fa-percent"></i></div>
+          </div>
+          <div class="text-muted" style="font-size: 0.85rem;" id="repCommissionRule">Komisi 5%, hanya untuk transaksi ≥ Rp50.000</div>
+        </div>
+      </div>
+    </div>
+
     <div class="row g-4">
       <!-- Menu Terlaris -->
       <div class="col-lg-6">
@@ -107,7 +138,7 @@
                 <tr>
                   <th>Menu</th>
                   <th class="text-end">Terjual</th>
-                  <th class="text-end">Omzet</th>
+                  <th class="text-end">Omzet Bersih</th>
                 </tr>
               </thead>
               <tbody id="topMenuTableBody">
@@ -146,6 +177,17 @@
 
     function formatRupiah(n) {
       return 'Rp ' + Math.round(n || 0).toLocaleString('id-ID');
+    }
+
+    // Komisi admin platform: 5%, HANYA dipotong dari transaksi senilai
+    // Rp50.000 ke atas — sama persis aturannya dengan index.html, biar
+    // angka "Omzet Bersih" di Dashboard & Laporan selalu konsisten.
+    const KOMISI_PERSEN = 5;
+    const BATAS_KOMISI = 50000;
+    function hitungOmzetBersih(totalPrice) {
+      const kenaKomisi = totalPrice >= BATAS_KOMISI;
+      const potongan = kenaKomisi ? Math.round(totalPrice * (KOMISI_PERSEN / 100)) : 0;
+      return { potongan, bersih: totalPrice - potongan, kenaKomisi };
     }
 
     function timeAgo(ts) {
@@ -192,8 +234,9 @@
       // sekilas aktivitas terbaru.
       const ordersQ = query(collection(db, 'orders'), where('storeId', '==', uid));
       onSnapshot(ordersQ, (snap) => {
-        let revenue = 0, completedCount = 0, cancelledCount = 0;
-        const menuStats = {}; // nama menu -> { qty, omzet }
+        let revenueGross = 0, revenueNet = 0, totalPotongan = 0;
+        let completedCount = 0, cancelledCount = 0;
+        const menuStats = {}; // nama menu -> { qty, omzetBersih }
 
         snap.forEach((docSnap) => {
           const d = normalizeOrder(docSnap.data());
@@ -202,16 +245,23 @@
 
           if (isCompleted) {
             completedCount++;
-            revenue += d.totalPrice;
+            const { potongan, bersih } = hitungOmzetBersih(d.totalPrice);
+            revenueGross += d.totalPrice;
+            revenueNet += bersih;
+            totalPotongan += potongan;
             if (!menuStats[d.itemName]) menuStats[d.itemName] = { qty: 0, omzet: 0 };
             menuStats[d.itemName].qty += d.qty;
-            menuStats[d.itemName].omzet += d.totalPrice;
+            // Omzet per menu juga ditampilkan BERSIH, konsisten sama kartu
+            // ringkasan di atas — bukan omzet kotor per item.
+            menuStats[d.itemName].omzet += bersih;
           } else if (isCancelled) {
             cancelledCount++;
           }
         });
 
-        document.getElementById('repRevenue').textContent = formatRupiah(revenue);
+        document.getElementById('repRevenue').textContent = formatRupiah(revenueNet);
+        document.getElementById('repRevenueGross').textContent = formatRupiah(revenueGross);
+        document.getElementById('repCommission').textContent = '- ' + formatRupiah(totalPotongan);
         document.getElementById('repCompleted').textContent = completedCount;
         document.getElementById('repCancelled').textContent = cancelledCount;
 
