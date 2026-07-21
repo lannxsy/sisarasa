@@ -20,7 +20,7 @@
     <div class="nav flex-column">
       <a href="index.html" class="nav-link"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
       <a href="toko.html" class="nav-link active"><i class="fa-solid fa-store"></i> Kelola Toko</a>
-      <a href="pesanan.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
+      <a href="pesanan.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Riwayat Pesanan</a>
       <a href="kelola-admin.html" class="nav-link"><i class="fa-solid fa-user-shield"></i> Kelola Admin</a>
     </div>
   </div>
@@ -124,8 +124,20 @@
       return div.innerHTML;
     }
 
+    let rawStores = [];
+    let adminIds = new Set();
     let allStores = [];
     let started = false;
+
+    // Akun admin (login lewat kelola-admin.html) kadang ikut punya dokumen
+    // di collection 'stores' — misal karena pernah daftar lewat alur
+    // mitra biasa sebelum jadi admin. Itu bukan toko sungguhan, jadi
+    // disaring dari tampilan di sini (BUKAN dihapus dari Firestore —
+    // datanya tetap aman, cuma gak ditampilkan di daftar toko admin).
+    function applyStoreFilter() {
+      allStores = rawStores.filter(s => !adminIds.has(s.id));
+      renderTable(document.getElementById('searchStore').value);
+    }
 
     function renderTable(filterText) {
       const tbody = document.getElementById('storesTableBody');
@@ -252,7 +264,7 @@
               return `<tr>
                 <td>${escapeHtml(m.name || m.namaMenu || '-')}</td>
                 <td class="text-muted small">Stok: ${m.stock ?? '-'}</td>
-                <td class="text-end fw-medium">Rp ${Number(m.price ?? m.harga ?? 0).toLocaleString('id-ID')}</td>
+                <td class="text-end fw-medium">Rp ${Number(m.discountPrice ?? m.price ?? m.harga ?? 0).toLocaleString('id-ID')}</td>
               </tr>`;
             }).join('') + '</tbody></table></div>';
         }
@@ -309,9 +321,16 @@
       if (started) return;
       started = true;
 
+      onSnapshot(collection(db, 'admins'), (snap) => {
+        adminIds = new Set(snap.docs.map(d => d.id));
+        applyStoreFilter();
+      }, (err) => {
+        console.error('Gagal memuat daftar admin:', err);
+      });
+
       onSnapshot(collection(db, 'stores'), (snap) => {
-        allStores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderTable(document.getElementById('searchStore').value);
+        rawStores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        applyStoreFilter();
       }, (err) => {
         console.error('Gagal memuat daftar toko:', err);
         document.getElementById('storesTableBody').innerHTML =

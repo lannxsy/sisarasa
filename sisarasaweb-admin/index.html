@@ -20,7 +20,7 @@
     <div class="nav flex-column">
       <a href="index.html" class="nav-link active"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
       <a href="toko.html" class="nav-link"><i class="fa-solid fa-store"></i> Kelola Toko</a>
-      <a href="pesanan.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Kelola Pesanan</a>
+      <a href="pesanan.html" class="nav-link"><i class="fa-solid fa-receipt"></i> Riwayat Pesanan</a>
       <a href="kelola-admin.html" class="nav-link"><i class="fa-solid fa-user-shield"></i> Kelola Admin</a>
     </div>
   </div>
@@ -80,12 +80,12 @@
         <div class="stat-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-              <div class="text-muted mb-1" style="font-size: 0.9rem;">Total Omzet Platform</div>
+              <div class="text-muted mb-1" style="font-size: 0.9rem;">Pendapatan Admin (10%)</div>
               <h3 class="fw-bold mb-0" id="statTotalRevenue">-</h3>
             </div>
             <div class="stat-icon icon-green"><i class="fa-solid fa-wallet"></i></div>
           </div>
-          <div class="text-muted" style="font-size: 0.85rem;">Pesanan berstatus Selesai</div>
+          <div class="text-muted" style="font-size: 0.85rem;">10% dari pesanan berstatus Selesai</div>
         </div>
       </div>
 
@@ -378,7 +378,7 @@
         renderTopStores(revenueByStoreCache);
 
         document.getElementById('statTotalOrders').textContent = snap.size;
-        document.getElementById('statTotalRevenue').textContent = formatRupiah(revenue);
+        document.getElementById('statTotalRevenue').textContent = formatRupiah(revenue * 0.1); // komisi admin 10%, bukan omzet kotor
         document.getElementById('statOrderBreakdown').innerHTML =
           `<span class="text-warning fw-medium">${statusCount.pending} Pending</span>` +
           ` · <span class="text-success fw-medium">${statusCount.completed} Selesai</span>` +

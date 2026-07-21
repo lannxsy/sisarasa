@@ -224,7 +224,9 @@
       pending: '<i class="fa-solid fa-clock fs-4 text-warning"></i>',
       confirmed: '<i class="fa-solid fa-circle-check fs-4 text-primary"></i>',
       completed: '<i class="fa-solid fa-circle-check fs-4 text-success"></i>',
+      selesai: '<i class="fa-solid fa-circle-check fs-4 text-success"></i>',
       cancelled: '<i class="fa-solid fa-times-circle fs-4 text-danger"></i>',
+      batal: '<i class="fa-solid fa-times-circle fs-4 text-danger"></i>',
     };
 
     // ── Normalisasi dokumen order ───────────────────────────────────────────
@@ -301,7 +303,8 @@
       );
 
       onSnapshot(ordersQ, (snapshot) => {
-        let todayCount = 0, menuSold = 0, revenue = 0, pendingCount = 0;
+        let todayCount = 0, menuSold = 0, pendingCount = 0;
+        let totalRevenue = 0; // Omzet (Selesai) di stat card — ALL TIME, bukan cuma hari ini
         let recentHtml = '';
         let shown = 0;
         // Tally qty per nama menu, KHUSUS pesanan hari ini, buat widget
@@ -349,19 +352,25 @@
           if (!belongsToStore) return;
 
           const d = normalizeOrder(raw);
+          const isSelesai = d.status === 'completed' || d.status === 'selesai';
           const createdDate = d.createdAt?.toDate ? d.createdAt.toDate() : null;
           const isToday = createdDate && createdDate >= today;
+
+          // Omzet (Selesai) di stat card = akumulasi SEMUA order Selesai
+          // sepanjang waktu, bukan cuma hari ini — makanya di luar blok
+          // isToday. Kalau cuma dihitung pas isToday, order Selesai dari
+          // hari-hari sebelumnya gak pernah keitung dan card selalu Rp 0.
+          if (isSelesai) totalRevenue += d.totalPrice;
 
           if (isToday) {
             todayCount++;
             menuSold += d.qty;
-            if (d.status === 'completed') revenue += d.totalPrice;
             if (d.status === 'pending') pendingCount++;
             todayItemQty[d.itemName] = (todayItemQty[d.itemName] || 0) + d.qty;
           }
 
           // Akumulasi omzet harian buat chart (7 hari terakhir, status completed saja)
-          if (d.status === 'completed' && createdDate) {
+          if (isSelesai && createdDate) {
             const key = localDateKey(createdDate);
             if (key in revenueByDay) revenueByDay[key] += d.totalPrice;
           }
@@ -387,7 +396,7 @@
         // Update stat cards
         document.getElementById('statTodayOrders').textContent = todayCount;
         document.getElementById('statMenuSold').textContent = menuSold;
-        document.getElementById('statRevenue').textContent = formatRupiah(revenue);
+        document.getElementById('statRevenue').textContent = formatRupiah(totalRevenue);
         document.getElementById('statPendingLabel').innerHTML =
           pendingCount > 0
             ? `<span class="text-warning"><i class="fa-solid fa-clock"></i> ${pendingCount} pesanan menunggu</span>`
